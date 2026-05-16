@@ -1,5 +1,5 @@
-const CACHE = 'spliteasy-v1';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon.svg'];
+const CACHE = 'spliteasy-v2';
+const SHELL = ['/spliteasy/', '/spliteasy/index.html', '/spliteasy/manifest.json', '/spliteasy/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));

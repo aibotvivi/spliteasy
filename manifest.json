@@ -2,7 +2,7 @@
   "name": "SplitEasy",
   "short_name": "SplitEasy",
   "description": "Split expenses and exchange currencies",
-  "start_url": "/",
+  "start_url": "/spliteasy/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F5F2F0",
