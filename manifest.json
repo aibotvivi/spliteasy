@@ -1,0 +1,13 @@
+{
+  "name": "SplitEasy",
+  "short_name": "SplitEasy",
+  "description": "Split expenses and exchange currencies",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F2F0",
+  "theme_color": "#443627",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
