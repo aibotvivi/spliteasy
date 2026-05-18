@@ -5,8 +5,8 @@
   "start_url": "/spliteasy/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#F5F2F0",
-  "theme_color": "#443627",
+  "background_color": "#FBF6EF",
+  "theme_color": "#6B5040",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
