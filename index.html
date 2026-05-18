@@ -1145,6 +1145,80 @@
         toast_('Bank unlinked');
       };
 
+      // Transactions across all linked items
+      const [bankTxns, setBankTxns] = useState([]);
+      const [txnsLoading, setTxnsLoading] = useState(false);
+      const [txnsLoadedAt, setTxnsLoadedAt] = useState(null);
+
+      const loadBankTransactions = useCallback(async () => {
+        if (!plaidItems.length) return;
+        setTxnsLoading(true);
+        const all = [];
+        for (const item of plaidItems) {
+          try {
+            const { data, error } = await sb.functions.invoke('plaid-transactions', {
+              body: { accessToken: item.accessToken },
+            });
+            if (error) { console.warn('txn fetch err', error); continue; }
+            if (data?.error) { console.warn('txn data err', data.error); continue; }
+            const accountById = {};
+            (data.accounts || []).forEach(a => { accountById[a.account_id] = a; });
+            (data.transactions || []).forEach(t => {
+              all.push({
+                txnId: t.transaction_id,
+                date: t.date,
+                name: t.merchant_name || t.name,
+                amount: t.amount,
+                currency: t.iso_currency_code || 'USD',
+                category: Array.isArray(t.category) ? t.category : [],
+                pending: !!t.pending,
+                accountName: accountById[t.account_id]?.name || 'Account',
+                accountMask: accountById[t.account_id]?.mask || '',
+                itemId: item.id,
+                institutionName: item.institutionName,
+              });
+            });
+          } catch (e) {
+            console.warn('item fetch crash', e);
+          }
+        }
+        all.sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name));
+        setBankTxns(all);
+        setTxnsLoadedAt(new Date());
+        setTxnsLoading(false);
+      }, [plaidItems]);
+
+      // Set of source transaction ids already pulled into an expense
+      const importedTxnIds = useMemo(() => {
+        const s = new Set();
+        groups.forEach(g => g.expenses.forEach(e => { if (e.sourceTxnId) s.add(e.sourceTxnId); }));
+        return s;
+      }, [groups]);
+
+      const addTxnToTrip = (txn, tripId, paidByMemberId) => {
+        const trip = groups.find(g => g.id === tripId);
+        if (!trip) return;
+        // Equal split among all members
+        const memberCount = trip.members.length;
+        const splits = {};
+        trip.members.forEach(m => { splits[m.id] = txn.amount / memberCount; });
+        setGroups(p => p.map(g => g.id === tripId
+          ? { ...g, expenses: [...g.expenses, {
+              id: uid(),
+              description: txn.name,
+              amount: txn.amount,
+              currency: txn.currency,
+              paidBy: paidByMemberId,
+              splitMethod: 'equal',
+              splits,
+              date: txn.date ? new Date(txn.date).toISOString() : new Date().toISOString(),
+              sourceTxnId: txn.txnId,
+              sourceBank: txn.institutionName,
+            }] }
+          : g));
+        toast_(`Added to ${trip.name}`);
+      };
+
       // ── Auth helpers ──
       const sendMagicLink = async (email) => {
         const redirectTo = window.location.origin + window.location.pathname;
@@ -1196,7 +1270,10 @@
               alerts={alerts} onRemoveAlert={removeAlert} onToggleAlertPause={toggleAlertPause} />
           )}
           {view === 'bank' && (
-            <BankView plaidItems={plaidItems} onLink={linkBank} onRemove={removeBank} />
+            <BankView plaidItems={plaidItems} onLink={linkBank} onRemove={removeBank}
+              groups={groups} bankTxns={bankTxns} txnsLoading={txnsLoading} txnsLoadedAt={txnsLoadedAt}
+              importedTxnIds={importedTxnIds}
+              onLoadTxns={loadBankTransactions} onAddTxn={addTxnToTrip} />
           )}
 
           {showNav && <BottomNav view={view} onNav={setView}/>}
@@ -2901,8 +2978,16 @@
     }
 
     // ── Bank View ────────────────────────────────────────────────
-    function BankView({ plaidItems, onLink, onRemove }) {
+    function BankView({ plaidItems, onLink, onRemove, groups, bankTxns, txnsLoading, txnsLoadedAt, importedTxnIds, onLoadTxns, onAddTxn }) {
       const [linking, setLinking] = useState(false);
+      const [pendingTxn, setPendingTxn] = useState(null);
+
+      // Auto-load transactions on first mount if banks are linked
+      useEffect(() => {
+        if (plaidItems.length && !txnsLoadedAt && !txnsLoading) {
+          onLoadTxns();
+        }
+      }, []); // eslint-disable-line
 
       const handleLink = async () => {
         setLinking(true);
@@ -3036,13 +3121,165 @@
                   )}
                 </button>
 
-                <p className="text-[11px] text-gray-500 leading-relaxed px-1">
-                  Transactions and "add to trip" coming next session. For now, this confirms the link flow works end-to-end.
-                </p>
+                {/* Transactions */}
+                <div>
+                  <div className="flex items-end justify-between mb-2 px-1">
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Recent transactions</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {txnsLoading ? 'Refreshing…' : txnsLoadedAt ? `Loaded ${timeAgo(txnsLoadedAt)}` : 'Last 30 days'}
+                      </p>
+                    </div>
+                    <button onClick={onLoadTxns} disabled={txnsLoading}
+                      aria-label="Refresh transactions"
+                      className="text-xs font-bold text-[#725E54] hover:text-[#443627] hover:bg-[#EEF0FC] px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50">
+                      <RefreshIco size={12} cls={txnsLoading ? 'animate-spin' : ''}/>Refresh
+                    </button>
+                  </div>
+
+                  {bankTxns.length === 0 && !txnsLoading ? (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
+                      <p className="text-sm font-semibold text-gray-700">No transactions yet</p>
+                      <p className="text-[11px] text-gray-500 mt-1">In sandbox there may not be any recent activity. Tap Refresh to retry.</p>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+                      {bankTxns.slice(0, 50).map(t => {
+                        const added = importedTxnIds.has(t.txnId);
+                        const isCredit = t.amount < 0; // Plaid: + = outflow, - = inflow
+                        return (
+                          <div key={t.txnId + ':' + t.itemId}
+                            className="px-4 py-3 flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-gray-900 text-sm truncate flex items-center gap-1.5">
+                                {t.name}
+                                {t.pending && <span className="text-[9px] font-bold uppercase text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Pending</span>}
+                              </p>
+                              <p className="text-[11px] text-gray-500 truncate">
+                                {new Date(t.date).toLocaleDateString()} · {t.institutionName}{t.accountMask ? ` ··· ${t.accountMask}` : ''}
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className={`font-bold text-sm tabular-nums ${isCredit ? 'text-emerald-600' : 'text-gray-900'}`}>
+                                {isCredit ? '+' : ''}{fmt(Math.abs(t.amount), t.currency)}
+                              </p>
+                            </div>
+                            {added ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full shrink-0 flex items-center gap-0.5">
+                                <CheckIco size={10}/>Added
+                              </span>
+                            ) : (
+                              <button onClick={() => setPendingTxn(t)}
+                                disabled={groups.length === 0 || isCredit}
+                                className="text-[11px] font-bold text-white bg-[#725E54] hover:bg-[#443627] disabled:opacity-30 disabled:cursor-not-allowed px-2.5 py-1.5 rounded-lg transition-colors shrink-0">
+                                Add to trip
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {groups.length === 0 && (
+                    <p className="text-[11px] text-gray-500 mt-2 px-1 leading-relaxed">
+                      Create a trip first to enable "Add to trip" on a transaction.
+                    </p>
+                  )}
+                </div>
               </>
             )}
           </div>
+
+          {/* Add transaction to trip modal */}
+          {pendingTxn && (
+            <AddTxnToTripModal
+              txn={pendingTxn}
+              groups={groups}
+              onClose={() => setPendingTxn(null)}
+              onAdd={(tripId, paidById) => {
+                onAddTxn(pendingTxn, tripId, paidById);
+                setPendingTxn(null);
+              }}
+            />
+          )}
         </div>
+      );
+    }
+
+    // ── Add Transaction to Trip Modal ───────────────────────────
+    function AddTxnToTripModal({ txn, groups, onClose, onAdd }) {
+      const firstWithMembers = groups.find(g => g.members.length > 0) || groups[0];
+      const [tripId, setTripId] = useState(firstWithMembers?.id || '');
+      const trip = groups.find(g => g.id === tripId);
+      const [paidById, setPaidById] = useState(trip?.members?.[0]?.id || '');
+
+      useEffect(() => {
+        const t = groups.find(g => g.id === tripId);
+        if (t && !t.members.some(m => m.id === paidById)) {
+          setPaidById(t.members[0]?.id || '');
+        }
+      }, [tripId, groups, paidById]);
+
+      const valid = tripId && paidById;
+      const submit = () => { if (valid) onAdd(tripId, paidById); };
+
+      return (
+        <Modal onClose={onClose}>
+          <div className="sticky top-0 bg-white z-10 px-6 pt-5 pb-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-gray-900">Add to trip</h2>
+            <button onClick={onClose} aria-label="Close" className="p-2 hover:bg-gray-100 rounded-xl"><XIco size={20} cls="text-gray-500"/></button>
+          </div>
+          <div className="px-6 py-4 space-y-4">
+            {/* Transaction summary */}
+            <div className="bg-[#EEF0FC] rounded-2xl p-4">
+              <p className="text-[11px] font-bold text-[#725E54] uppercase tracking-wider">Transaction</p>
+              <p className="text-base font-bold text-gray-900 mt-1">{txn.name}</p>
+              <div className="flex items-baseline justify-between mt-1">
+                <p className="text-xs text-gray-600">{new Date(txn.date).toLocaleDateString()} · {txn.institutionName}</p>
+                <p className="text-xl font-bold text-[#443627] tabular-nums">{fmt(Math.abs(txn.amount), txn.currency)}</p>
+              </div>
+            </div>
+
+            {/* Trip picker */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Trip</label>
+              <select value={tripId} onChange={e => setTripId(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]">
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </div>
+
+            {/* Paid by */}
+            {trip && trip.members.length > 0 && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Paid by</label>
+                <div className="flex flex-wrap gap-2">
+                  {trip.members.map(m => (
+                    <button key={m.id} onClick={() => setPaidById(m.id)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                        paidById === m.id ? 'bg-[#725E54] text-white border-[#725E54] shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-[#8EDCE6]'
+                      }`}>
+                      <Avatar member={m} size="sm"/>
+                      <span className="max-w-[80px] truncate">{m.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[11px] text-gray-500 leading-snug">
+              Will be split equally across all {trip?.members?.length || 0} members of {trip?.name}. Currency: {txn.currency}. You can edit or change the split in the trip after.
+            </p>
+          </div>
+          <div className="sticky bottom-0 bg-white px-6 pt-3 border-t border-gray-100"
+            style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+            <button onClick={submit} disabled={!valid}
+              className="w-full bg-gradient-to-r from-[#443627] to-[#725E54] text-white py-3.5 rounded-xl font-bold hover:shadow-md active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+              Add as expense
+            </button>
+          </div>
+        </Modal>
       );
     }
 
