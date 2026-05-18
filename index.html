@@ -2883,9 +2883,16 @@
             {/* About */}
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">About</p>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3 flex items-center justify-between">
-                <span className="text-sm text-gray-700 font-medium">SplitEasy</span>
-                <span className="text-xs text-gray-500">v1.0</span>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
+                  <span className="text-sm text-gray-700 font-medium">SplitEasy</span>
+                  <span className="text-xs text-gray-500">v1.0</span>
+                </div>
+                <a href="/spliteasy/privacy.html" target="_blank" rel="noopener"
+                  className="px-4 py-3 flex items-center justify-between text-sm text-gray-800 hover:bg-gray-50 transition-colors">
+                  <span className="font-semibold">Privacy policy</span>
+                  <ChevRightIco size={14} cls="text-gray-400"/>
+                </a>
               </div>
             </div>
           </div>

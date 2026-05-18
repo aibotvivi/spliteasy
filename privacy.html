@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SplitEasy — Privacy Policy</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 720px;
+      margin: 2rem auto;
+      padding: 1.25rem;
+      color: #443627;
+      background: #FBF6EF;
+      line-height: 1.65;
+    }
+    h1 { color: #5C3A26; border-bottom: 2px solid #B89B86; padding-bottom: 0.5rem; margin-top: 0; }
+    h2 { color: #5C3A26; margin-top: 2rem; }
+    p, li { color: #443627; }
+    a { color: #725E54; }
+    .meta { color: #876b56; font-size: 0.9em; }
+    ul { padding-left: 1.4rem; }
+    footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #E5DAC9; color: #876b56; font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <h1>SplitEasy — Privacy Policy</h1>
+  <p class="meta">Last updated: 19 May 2026</p>
+
+  <h2>About SplitEasy</h2>
+  <p>
+    SplitEasy is a personal-use Progressive Web App for splitting trip expenses,
+    tracking currency rates, and optionally importing transactions from linked
+    bank accounts. It is built and operated by an individual for their own
+    informal use; it is not a commercial product and there is no company behind
+    it. By using the app you agree to the data handling described here.
+  </p>
+
+  <h2>What we collect</h2>
+  <p>Only data necessary for the app to work:</p>
+  <ul>
+    <li><strong>What you create:</strong> trip names, member names and optional emails, expense descriptions, amounts, currencies, payments, receipt photos, currency watchlist, and rate alerts.</li>
+    <li><strong>Authentication:</strong> your email address, used to send you a magic link or one-time code for sign-in. No password is stored — sign-in is passwordless.</li>
+    <li><strong>Linked bank data (optional, via Plaid):</strong> bank name, account names, balances, and transactions for the date ranges you request. Plaid handles all bank logins through each bank's own OAuth flow — your bank password is never seen, transmitted, or stored by SplitEasy or Plaid.</li>
+    <li><strong>Receipt scans (optional, via Claude AI):</strong> when you use the AI receipt scan, the receipt photo is sent to Anthropic's Claude API to extract items, totals, and merchant info. Anthropic does not train on submitted images.</li>
+  </ul>
+
+  <h2>Where data is stored</h2>
+  <ul>
+    <li><strong>On your device:</strong> in your browser's local storage. Cleared when you clear browser data.</li>
+    <li><strong>In Supabase</strong> (only if you sign in): a single JSON row keyed to your user ID, protected by Row Level Security so only your authenticated session can read it.</li>
+  </ul>
+
+  <h2>Third parties</h2>
+  <p>SplitEasy uses these services:</p>
+  <ul>
+    <li><a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a> — database and authentication.</li>
+    <li><a href="https://plaid.com/legal" target="_blank" rel="noopener">Plaid</a> — bank linking, only when you use the Bank tab.</li>
+    <li><a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic</a> — Claude AI receipt scanning, only when you scan a receipt.</li>
+    <li><a href="https://www.frankfurter.dev/" target="_blank" rel="noopener">Frankfurter</a> and ExchangeRate-API — read-only public currency exchange rates. No personal data sent.</li>
+  </ul>
+  <p>No advertising, no analytics, no profile building, no data sold or shared with anyone else.</p>
+
+  <h2>How we keep data safe</h2>
+  <ul>
+    <li>All connections use HTTPS (TLS).</li>
+    <li>Supabase rows are protected by Row Level Security — only the row owner's authenticated session can read or write.</li>
+    <li>Plaid access tokens are stored in Supabase under the same Row Level Security policy. If you sign out, the cloud copy remains tied to your account; you can clear it at any time.</li>
+    <li>SplitEasy never sees or stores your bank login credentials.</li>
+  </ul>
+
+  <h2>Your rights</h2>
+  <ul>
+    <li><strong>Export</strong> a full backup of your data as JSON from <em>Profile → Export backup</em>.</li>
+    <li><strong>Delete</strong> all locally stored data at any time from <em>Profile → Clear all data</em>.</li>
+    <li><strong>Unlink</strong> any bank from the Bank tab at any time. This removes the access token from your record. Plaid retains some metadata according to its own policy.</li>
+    <li><strong>Sign out</strong> at any time from Profile.</li>
+    <li><strong>Account deletion:</strong> contact the developer (below) to delete your Supabase account record entirely.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>SplitEasy is not directed at users under 13. We do not knowingly collect data from children.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes, the "Last updated" date above will change. Continued use of the app after that date constitutes acceptance.</p>
+
+  <h2>Contact</h2>
+  <p>For privacy questions, data deletion requests, or anything else: <a href="mailto:aibotvivi@gmail.com">aibotvivi@gmail.com</a>.</p>
+
+  <footer>
+    <a href="/spliteasy/">← Back to SplitEasy</a>
+  </footer>
+</body>
+</html>

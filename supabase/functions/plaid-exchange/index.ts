@@ -15,8 +15,15 @@ function reply(body) {
   });
 }
 
+// PLAID_ENV controls which Plaid host to call. Default sandbox.
+// Valid values: sandbox | production
+function plaidHost() {
+  const env = (Deno.env.get("PLAID_ENV") || "sandbox").toLowerCase();
+  return "https://" + env + ".plaid.com";
+}
+
 async function plaid(path, clientId, secret, body) {
-  const r = await fetch("https://sandbox.plaid.com" + path, {
+  const r = await fetch(plaidHost() + path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ client_id: clientId, secret: secret, ...body }),

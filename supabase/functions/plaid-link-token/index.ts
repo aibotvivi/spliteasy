@@ -28,8 +28,13 @@ serve(async (req) => {
     if (!clientId) throw new Error("PLAID_CLIENT_ID not set");
     if (!secret) throw new Error("PLAID_SECRET not set");
 
+    // PLAID_ENV controls which Plaid host to call. Default sandbox.
+    // Valid values: sandbox | production
+    const env = (Deno.env.get("PLAID_ENV") || "sandbox").toLowerCase();
+    const host = "https://" + env + ".plaid.com";
+
     const r = await fetch(
-      "https://sandbox.plaid.com/link/token/create",
+      host + "/link/token/create",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
