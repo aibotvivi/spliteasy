@@ -2621,6 +2621,10 @@
       const [receipt, setReceipt] = useState(null);
       const [receiptLoad, setReceiptLoad] = useState(false);
       const [photoSheet, setPhotoSheet] = useState(false);
+      const [scanning, setScanning] = useState(false);
+      const [scanResult, setScanResult] = useState(null);
+      const [scanError, setScanError] = useState(null);
+      const [showItems, setShowItems] = useState(true);
       const camRef = useRef(null);
       const galRef = useRef(null);
       const [selMem, setSelMem] = useState(() => new Set(group.members.map(m => m.id)));
@@ -2635,14 +2639,40 @@
         return o;
       });
 
+      const runScan = async (imageDataUrl, hint) => {
+        setScanning(true);
+        setScanError(null);
+        try {
+          const { data, error } = await sb.functions.invoke('scan-receipt', {
+            body: { image: imageDataUrl, currencyHint: hint || currency }
+          });
+          if (error) throw new Error(error.message || 'Scan failed');
+          if (data?.error) throw new Error(data.error);
+          // Auto-fill fields (don't overwrite user input)
+          if (data.merchant && !desc.trim()) setDesc(data.merchant);
+          if (typeof data.total === 'number' && data.total > 0 && !amount) setAmt(String(data.total));
+          if (data.currency && CURRENCIES.some(c => c.code === data.currency)) setCur(data.currency);
+          setScanResult(data);
+          setShowItems(true);
+        } catch (err) {
+          setScanError(err?.message || 'Could not read this receipt');
+        } finally {
+          setScanning(false);
+        }
+      };
+
       const onPickPhoto = async (e) => {
         const f = e.target.files?.[0];
         if (!f) return;
         if (!/^image\//.test(f.type)) { e.target.value = ''; return; }
         setReceiptLoad(true);
+        setScanResult(null);
+        setScanError(null);
         try {
           const compressed = await resizeImage(f);
           setReceipt(compressed);
+          // Auto-scan
+          await runScan(compressed, currency);
         } catch {} finally {
           setReceiptLoad(false);
           e.target.value = '';
@@ -2713,18 +2743,113 @@
                   </button>
                 </div>
                 {receipt && (
-                  <div className="mt-2 flex items-center gap-2 bg-emerald-50 border border-emerald-200/60 rounded-xl p-2">
-                    <img src={receipt} alt="Receipt"
-                      className="w-12 h-12 rounded-lg object-cover border border-emerald-200/60"/>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-emerald-700">Receipt attached</p>
-                      <p className="text-[11px] text-emerald-600">Tap camera to replace</p>
+                  <div className="mt-2 bg-emerald-50 border border-emerald-200/60 rounded-xl overflow-hidden">
+                    {/* Top: thumbnail + status */}
+                    <div className="flex items-center gap-2 p-2">
+                      <img src={receipt} alt="Receipt"
+                        className="w-12 h-12 rounded-lg object-cover border border-emerald-200/60"/>
+                      <div className="flex-1 min-w-0">
+                        {scanning ? (
+                          <>
+                            <p className="text-xs font-bold text-[#443627] flex items-center gap-1.5">
+                              <RefreshIco size={11} cls="animate-spin"/>Reading receipt with AI…
+                            </p>
+                            <p className="text-[11px] text-gray-600">This usually takes 5-10 seconds</p>
+                          </>
+                        ) : scanError ? (
+                          <>
+                            <p className="text-xs font-bold text-rose-700">Scan failed</p>
+                            <p className="text-[11px] text-rose-600 truncate">{scanError}</p>
+                          </>
+                        ) : scanResult ? (
+                          <>
+                            <p className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                              <SparkleIco size={11}/>Scanned successfully
+                            </p>
+                            <p className="text-[11px] text-emerald-600">
+                              {scanResult.merchant ? `${scanResult.merchant} · ` : ''}{scanResult.items?.length || 0} items
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs font-bold text-emerald-700">Receipt attached</p>
+                            <p className="text-[11px] text-emerald-600">Tap camera to replace</p>
+                          </>
+                        )}
+                      </div>
+                      {!scanning && scanError && (
+                        <button type="button" onClick={() => runScan(receipt, currency)}
+                          aria-label="Try scanning again"
+                          className="px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 rounded-lg transition-colors shrink-0">
+                          Retry
+                        </button>
+                      )}
+                      {!scanning && !scanError && !scanResult && (
+                        <button type="button" onClick={() => runScan(receipt, currency)}
+                          className="px-2.5 py-1.5 text-[11px] font-bold text-[#443627] bg-white hover:bg-[#EEF0FC] rounded-lg transition-colors shrink-0 flex items-center gap-1">
+                          <SparkleIco size={11}/>Scan
+                        </button>
+                      )}
+                      <button type="button" onClick={() => { setReceipt(null); setScanResult(null); setScanError(null); }}
+                        aria-label="Remove receipt"
+                        className="p-1.5 text-emerald-600 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0">
+                        <XIco size={15}/>
+                      </button>
                     </div>
-                    <button type="button" onClick={() => setReceipt(null)}
-                      aria-label="Remove receipt"
-                      className="p-1.5 text-emerald-600 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0">
-                      <XIco size={15}/>
-                    </button>
+
+                    {/* Items breakdown */}
+                    {scanResult && scanResult.items && scanResult.items.length > 0 && (
+                      <div className="border-t border-emerald-200/60 bg-white">
+                        <button type="button" onClick={() => setShowItems(v => !v)}
+                          className="w-full px-3 py-2 flex items-center justify-between text-xs font-bold text-gray-700 hover:bg-gray-50">
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-emerald-600">✨</span>
+                            {scanResult.items.length} items detected
+                          </span>
+                          {showItems ? <ChevUpIco size={14} cls="text-gray-500"/> : <ChevDownIco size={14} cls="text-gray-500"/>}
+                        </button>
+                        {showItems && (
+                          <div className="px-3 pb-2.5 space-y-1">
+                            {scanResult.items.map((item, i) => (
+                              <div key={i} className="flex items-center justify-between text-xs">
+                                <span className="text-gray-700 truncate flex-1">{item.description}</span>
+                                <span className="font-semibold text-gray-900 tabular-nums shrink-0 ml-2">
+                                  {fmt(item.amount, scanResult.currency || currency)}
+                                </span>
+                              </div>
+                            ))}
+                            {(scanResult.subtotal != null || scanResult.tax != null || scanResult.tip != null) && (
+                              <div className="pt-1.5 mt-1.5 border-t border-dashed border-gray-200 space-y-0.5">
+                                {scanResult.subtotal != null && (
+                                  <div className="flex justify-between text-[11px] text-gray-500">
+                                    <span>Subtotal</span>
+                                    <span className="tabular-nums">{fmt(scanResult.subtotal, scanResult.currency || currency)}</span>
+                                  </div>
+                                )}
+                                {scanResult.tax != null && (
+                                  <div className="flex justify-between text-[11px] text-gray-500">
+                                    <span>Tax</span>
+                                    <span className="tabular-nums">{fmt(scanResult.tax, scanResult.currency || currency)}</span>
+                                  </div>
+                                )}
+                                {scanResult.tip != null && (
+                                  <div className="flex justify-between text-[11px] text-gray-500">
+                                    <span>Tip</span>
+                                    <span className="tabular-nums">{fmt(scanResult.tip, scanResult.currency || currency)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {scanResult.total != null && (
+                              <div className="flex justify-between text-xs font-bold text-gray-900 pt-1.5 mt-1 border-t border-gray-200">
+                                <span>Total</span>
+                                <span className="tabular-nums">{fmt(scanResult.total, scanResult.currency || currency)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
