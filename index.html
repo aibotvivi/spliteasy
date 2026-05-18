@@ -161,6 +161,18 @@
 
     const isoDate = d => d.toISOString().split('T')[0];
 
+    // ── User preferences (localStorage) ──────────────────────────
+    const PREFS_KEY = 'spliteasy-prefs';
+    const DEFAULT_PREFS = { defaultCurrency: 'GBP', name: '' };
+
+    function loadPrefs() {
+      try {
+        const s = localStorage.getItem(PREFS_KEY);
+        return s ? { ...DEFAULT_PREFS, ...JSON.parse(s) } : { ...DEFAULT_PREFS };
+      } catch { return { ...DEFAULT_PREFS }; }
+    }
+    function savePrefs(p) { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); }
+
     // ── Debt Engine ──────────────────────────────────────────────
     function calcBalances(members, expenses, settlements, rates, base) {
       const bal = {};
@@ -290,6 +302,44 @@
       </svg>
     );
 
+    const ProfileIco = ({ size=20, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    );
+
+    const DownloadIco = ({ size=20, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    );
+
+    const UploadIco = ({ size=20, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    );
+
+    const SparkleIco = ({ size=20, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/>
+      </svg>
+    );
+
+    const ChevRightIco = ({ size=16, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    );
+
     // ── Avatar ───────────────────────────────────────────────────
     const Avatar = ({ member, size = 'md', border = false }) => {
       const sizes = { sm:'w-7 h-7 text-xs', md:'w-10 h-10 text-sm', lg:'w-12 h-12 text-sm' };
@@ -318,19 +368,23 @@
 
     // ── Bottom Nav ───────────────────────────────────────────────
     function BottomNav({ view, onNav }) {
+      const Tab = ({ id, Ico, label }) => {
+        const active = view === id;
+        return (
+          <button onClick={() => onNav(id)}
+            className="flex-1 py-2.5 flex flex-col items-center gap-1 transition-colors relative">
+            {active && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-[#725E54] rounded-b-full"/>}
+            <Ico size={22} cls={active ? 'text-[#725E54]' : 'text-[#A7B0CA]'}/>
+            <span className={`text-[11px] font-semibold ${active ? 'text-[#725E54]' : 'text-[#A7B0CA]'}`}>{label}</span>
+          </button>
+        );
+      };
       return (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-40">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-40 pb-[env(safe-area-inset-bottom)]">
           <div className="max-w-lg mx-auto flex">
-            <button onClick={() => onNav('home')}
-              className="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors">
-              <UsersIco size={22} cls={view === 'home' ? 'text-[#725E54]' : 'text-[#A7B0CA]'}/>
-              <span className={`text-xs font-semibold ${view === 'home' ? 'text-[#725E54]' : 'text-[#A7B0CA]'}`}>Groups</span>
-            </button>
-            <button onClick={() => onNav('exchange')}
-              className="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors">
-              <ExchangeIco size={22} cls={view === 'exchange' ? 'text-[#725E54]' : 'text-[#A7B0CA]'}/>
-              <span className={`text-xs font-semibold ${view === 'exchange' ? 'text-[#725E54]' : 'text-[#A7B0CA]'}`}>Exchange</span>
-            </button>
+            <Tab id="home"     Ico={UsersIco}    label="Trips"/>
+            <Tab id="exchange" Ico={ExchangeIco} label="Exchange"/>
+            <Tab id="profile"  Ico={ProfileIco}  label="Profile"/>
           </div>
         </div>
       );
@@ -423,6 +477,7 @@
         try { const s = localStorage.getItem('spliteasy'); return s ? JSON.parse(s) : makeSample(); }
         catch { return makeSample(); }
       });
+      const [prefs, setPrefs]     = useState(loadPrefs);
       const [view, setView]       = useState('home');
       const [gid, setGid]         = useState(null);
       const [rates, setRates]     = useState({});
@@ -439,6 +494,8 @@
       const group = groups.find(g => g.id === gid);
 
       useEffect(() => { localStorage.setItem('spliteasy', JSON.stringify(groups)); }, [groups]);
+      useEffect(() => { savePrefs(prefs); }, [prefs]);
+      const updatePrefs = (patch) => setPrefs(p => ({ ...p, ...patch }));
 
       const loadRates = useCallback(async () => {
         setRL(true); setRE(false);
@@ -464,12 +521,12 @@
 
       const addGroup = g => {
         setGroups(p => [...p, { ...g, id: uid(), expenses:[], settlements:[] }]);
-        toast_(`Group "${g.name}" created`);
+        toast_(`Trip "${g.name}" created`);
       };
       const delGroup = id => {
         setGroups(p => p.filter(g => g.id !== id));
         if (gid === id) { setView('home'); setGid(null); }
-        toast_('Group deleted');
+        toast_('Trip deleted');
       };
       const addMember = mem => {
         setGroups(p => p.map(g => g.id === gid ? { ...g, members:[...g.members, {...mem, id:uid()}] } : g));
@@ -492,7 +549,26 @@
       };
 
       const openGroup = id => { setGid(id); setView('group'); setTab('expenses'); };
-      const showNav = view === 'home' || view === 'exchange';
+      const showNav = view === 'home' || view === 'exchange' || view === 'profile';
+
+      const clearAllData = () => {
+        if (!confirm('Delete all trips, expenses, and watchlist data? This cannot be undone.')) return;
+        localStorage.removeItem('spliteasy');
+        localStorage.removeItem('spliteasy-fav');
+        localStorage.removeItem('spliteasy-order');
+        setGroups([]);
+        toast_('All data cleared');
+      };
+      const importData = (data) => {
+        try {
+          if (!Array.isArray(data?.groups)) throw new Error('Invalid file');
+          setGroups(data.groups);
+          if (Array.isArray(data.favorites)) localStorage.setItem('spliteasy-fav', JSON.stringify(data.favorites));
+          if (Array.isArray(data.order))     localStorage.setItem('spliteasy-order', JSON.stringify(data.order));
+          if (data.prefs)                    setPrefs(p => ({ ...p, ...data.prefs }));
+          toast_('Data imported');
+        } catch { toast_('Could not read file', 'err'); }
+      };
 
       return (
         <div className="min-h-screen bg-[#F5F2F0]">
@@ -511,12 +587,16 @@
           )}
           {view === 'exchange' && (
             <ExchangeView rates={rates} rateLoad={rateLoad} rateErr={rateErr}
-              rateTs={rateTs} onRefresh={loadRates} />
+              rateTs={rateTs} onRefresh={loadRates} prefs={prefs} />
+          )}
+          {view === 'profile' && (
+            <ProfileView groups={groups} prefs={prefs} onUpdatePrefs={updatePrefs}
+              onClearData={clearAllData} onImport={importData} />
           )}
 
           {showNav && <BottomNav view={view} onNav={setView}/>}
 
-          {mAddGrp && <AddGroupModal onClose={() => setAddGrp(false)} onAdd={addGroup}/>}
+          {mAddGrp && <AddGroupModal prefs={prefs} onClose={() => setAddGrp(false)} onAdd={addGroup}/>}
           {mAddMem && group && <AddMemberModal group={group} onClose={() => setAddMem(false)} onAdd={addMember}/>}
           {mAddExp && group && <AddExpenseModal group={group} rates={rates} onClose={() => setAddExp(false)} onAdd={addExpense}/>}
           {mSettle && group && <SettleUpModal group={group} debt={mSettle} onClose={() => setSettle(null)} onSettle={addSettlement}/>}
@@ -532,9 +612,10 @@
     }
 
     // ── Exchange View ────────────────────────────────────────────
-    function ExchangeView({ rates, rateLoad, rateErr, rateTs, onRefresh }) {
-      const [fromCur, setFrom]       = useState('GBP');
-      const [toCur, setTo]           = useState('HKD');
+    function ExchangeView({ rates, rateLoad, rateErr, rateTs, onRefresh, prefs }) {
+      const defaultFrom = prefs?.defaultCurrency || 'GBP';
+      const [fromCur, setFrom]       = useState(defaultFrom);
+      const [toCur, setTo]           = useState(defaultFrom === 'HKD' ? 'GBP' : 'HKD');
       const [amount, setAmount]      = useState('100');
       const [yRates, setYRates]      = useState({});
       const [selectedWatchCur, setSelectedWatchCur] = useState(null);
@@ -544,7 +625,7 @@
       const [chartActiveIdx, setChartActiveIdx] = useState(null);
       const [search, setSearch]      = useState('');
       const [watchAmt, setWatchAmt]  = useState('100');
-      const [watchCur, setWatchCur]  = useState('GBP');
+      const [watchCur, setWatchCur]  = useState(defaultFrom);
 
       // Favorites: Set of currency codes
       const [favorites, setFavorites] = useState(() => {
@@ -718,20 +799,22 @@
             {/* ── Converter + Provider Card ── */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-5">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Converter</p>
-
               {/* From */}
-              <div className="bg-gray-50 rounded-xl p-4 mb-2">
-                <div className="flex items-center justify-between mb-1.5">
-                  <select value={fromCur} onChange={e => setFrom(e.target.value)}
-                    className="font-bold text-gray-900 bg-transparent border-0 focus:outline-none cursor-pointer text-base appearance-auto">
-                    {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                  </select>
-                  <span className="text-xs text-gray-400 truncate ml-2">{fromCurObj?.name}</span>
+              <div className="bg-gray-50 rounded-2xl p-4 mb-2 relative">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">You send</p>
+                  <div className="relative">
+                    <select value={fromCur} onChange={e => setFrom(e.target.value)}
+                      className="font-bold text-gray-900 bg-white border border-gray-200 rounded-full pl-2.5 pr-7 py-1 focus:outline-none cursor-pointer text-sm appearance-none">
+                      {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                    </select>
+                    <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                  </div>
                 </div>
                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
                   min="0" placeholder="0"
-                  className="w-full bg-transparent text-3xl font-bold text-gray-900 focus:outline-none"/>
+                  className="w-full bg-transparent text-3xl font-bold text-gray-900 focus:outline-none tabular-nums"/>
+                <p className="text-xs text-gray-400 truncate mt-0.5">{fromCurObj?.symbol} {fromCurObj?.name}</p>
               </div>
 
               {/* Quick amounts */}
@@ -747,26 +830,31 @@
               </div>
 
               {/* Swap */}
-              <div className="flex justify-center my-3">
+              <div className="flex justify-center -my-1 relative z-10">
                 <button onClick={swap}
-                  className="w-10 h-10 bg-[#725E54] rounded-full flex items-center justify-center hover:bg-[#443627] active:scale-95 transition-all shadow-md">
+                  className="w-11 h-11 bg-white border-4 border-[#F5F2F0] rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md"
+                  style={{ backgroundColor: '#725E54' }}
+                  aria-label="Swap currencies">
                   <SwapIco size={18} cls="text-white"/>
                 </button>
               </div>
 
-              {/* To */}
-              <div className="bg-[#EEF0FC] rounded-xl p-4">
-                <div className="flex items-center justify-between mb-1.5">
-                  <select value={toCur} onChange={e => setTo(e.target.value)}
-                    className="font-bold text-[#443627] bg-transparent border-0 focus:outline-none cursor-pointer text-base appearance-auto">
-                    {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                  </select>
-                  <span className="text-xs text-[#A7B0CA] truncate ml-2">{toCurObj?.name}</span>
+              {/* To — hero card */}
+              <div className="bg-gradient-to-br from-[#EEF0FC] to-[#D5DCF9] rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-bold text-[#725E54]/70 uppercase tracking-wider">You receive</p>
+                  <div className="relative">
+                    <select value={toCur} onChange={e => setTo(e.target.value)}
+                      className="font-bold text-[#443627] bg-white border border-white rounded-full pl-2.5 pr-7 py-1 focus:outline-none cursor-pointer text-sm appearance-none">
+                      {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                    </select>
+                    <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-[#725E54] pointer-events-none"/>
+                  </div>
                 </div>
                 {rateLoad ? (
-                  <div className="h-9 bg-[#D5DCF9] rounded-lg animate-pulse"/>
+                  <div className="h-10 bg-white/50 rounded-lg animate-pulse"/>
                 ) : (
-                  <p className="text-3xl font-bold text-[#443627]">
+                  <p className="text-4xl font-bold text-[#443627] tabular-nums tracking-tight">
                     {toCurObj?.symbol}
                     {fromCur === toCur ? numAmt.toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2})
                       : (toCur === 'JPY' || toCur === 'KRW')
@@ -774,6 +862,7 @@
                         : converted.toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2})}
                   </p>
                 )}
+                <p className="text-xs text-[#725E54]/70 truncate mt-0.5">{toCurObj?.name}</p>
               </div>
 
               {/* Rate info */}
@@ -884,9 +973,14 @@
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               {/* Header */}
               <div className="px-5 pt-5 pb-4 space-y-3">
-                <p className="text-sm font-bold text-gray-800">
-                  {isSearching ? 'Search Results' : 'My Watchlist'}
-                </p>
+                <div className="flex items-baseline justify-between">
+                  <p className="text-base font-bold text-gray-900 tracking-tight">
+                    {isSearching ? 'Search Results' : 'My Watchlist'}
+                  </p>
+                  {!isSearching && watchlist.length > 0 && (
+                    <p className="text-xs text-gray-400 font-medium">{watchlist.length} {watchlist.length === 1 ? 'currency' : 'currencies'}</p>
+                  )}
+                </div>
 
                 {/* Search */}
                 <div className="relative">
@@ -894,7 +988,7 @@
                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                   </svg>
                   <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="Search currency or country…"
+                    placeholder="Add currency or country…"
                     className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6] focus:border-transparent placeholder-gray-400"/>
                   {search && (
                     <button onClick={() => setSearch('')}
@@ -906,15 +1000,20 @@
               <div className="divide-y divide-gray-50">
                 {/* Base amount input — sits at top of list, visually flows into rows */}
                 {!rateLoad && !isSearching && watchlist.length > 0 && (
-                  <div className="flex items-center gap-2 bg-[#EEF0FC] px-4 py-3">
-                    <select value={watchCur} onChange={e => setWatchCur(e.target.value)}
-                      className="bg-transparent font-bold text-[#443627] text-sm border-0 focus:outline-none cursor-pointer appearance-auto shrink-0">
-                      {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                    </select>
-                    <div className="w-px h-5 bg-[#A7B0CA]/60 shrink-0"/>
-                    <input type="number" value={watchAmt} onChange={e => setWatchAmt(e.target.value)}
-                      min="0" placeholder="0"
-                      className="flex-1 bg-transparent text-[#443627] font-bold text-lg focus:outline-none min-w-0"/>
+                  <div className="bg-gradient-to-r from-[#EEF0FC] to-[#D5DCF9]/70 px-4 py-3">
+                    <p className="text-[10px] font-bold text-[#725E54]/70 uppercase tracking-wider mb-1">Showing rates for</p>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <select value={watchCur} onChange={e => setWatchCur(e.target.value)}
+                          className="bg-white border border-white rounded-full pl-2.5 pr-7 py-1 font-bold text-[#443627] text-sm focus:outline-none cursor-pointer appearance-none shrink-0">
+                          {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                        </select>
+                        <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-[#725E54] pointer-events-none"/>
+                      </div>
+                      <input type="number" value={watchAmt} onChange={e => setWatchAmt(e.target.value)}
+                        min="0" placeholder="0"
+                        className="flex-1 bg-transparent text-[#443627] font-bold text-xl focus:outline-none min-w-0 tabular-nums"/>
+                    </div>
                   </div>
                 )}
                 {/* Loading skeletons */}
@@ -975,9 +1074,11 @@
                 {!rateLoad && !isSearching && (
                   watchlist.length === 0 ? (
                     <div className="px-5 py-12 text-center">
-                      <p className="text-3xl mb-3">🔍</p>
-                      <p className="text-sm font-semibold text-gray-500 mb-1">Your watchlist is empty</p>
-                      <p className="text-xs text-gray-400">Search for a currency above and tap ★ to add it here</p>
+                      <div className="w-14 h-14 bg-gradient-to-br from-[#EEF0FC] to-[#D5DCF9] rounded-2xl flex items-center justify-center mx-auto mb-3">
+                        <span className="text-2xl">⭐</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-700 mb-1">Build your watchlist</p>
+                      <p className="text-xs text-gray-400 max-w-[14rem] mx-auto leading-relaxed">Search a currency or country above, then tap ★ to follow live rates and 5-year charts.</p>
                     </div>
                   ) : watchlist.map(c => {
                     const hasChange = c.change !== null;
@@ -1122,6 +1223,14 @@
 
     // ── Home View ────────────────────────────────────────────────
     function HomeView({ groups, rates, rateLoad, rateErr, onRefresh, onOpen, onNew, onDel }) {
+      const totalOutstanding = useMemo(() => {
+        return groups.reduce((s, g) => {
+          const bal = calcBalances(g.members, g.expenses, g.settlements, rates, g.currency);
+          const debts = simplify(bal);
+          return s + debts.reduce((a, d) => a + d.amount, 0);
+        }, 0);
+      }, [groups, rates]);
+
       return (
         <div className="max-w-lg mx-auto pb-24">
           <div className="px-4 pt-12 pb-2">
@@ -1147,25 +1256,44 @@
           </div>
 
           <div className="px-4 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-800 text-lg">Groups</h2>
-              <button onClick={onNew}
-                className="flex items-center gap-1.5 bg-[#725E54] text-white px-3.5 py-2 rounded-xl text-sm font-semibold hover:bg-[#443627] transition-colors shadow-sm">
-                <PlusIco size={16}/>New Group
-              </button>
+            <div className="flex items-end justify-between mb-4">
+              <div>
+                <h2 className="font-bold text-gray-900 text-2xl tracking-tight">Your Trips</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {groups.length === 0
+                    ? 'Track expenses from anywhere'
+                    : `${groups.length} ${groups.length === 1 ? 'trip' : 'trips'}${totalOutstanding > 0.01 ? ' · some unsettled' : ''}`}
+                </p>
+              </div>
+              {groups.length > 0 && (
+                <button onClick={onNew}
+                  className="flex items-center gap-1.5 bg-[#725E54] text-white px-3.5 py-2 rounded-xl text-sm font-semibold hover:bg-[#443627] transition-colors shadow-sm">
+                  <PlusIco size={16}/>New
+                </button>
+              )}
             </div>
 
             {groups.length === 0 ? (
-              <div className="text-center py-20">
-                <div className="w-16 h-16 bg-[#D5DCF9] rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <UsersIco size={30} cls="text-[#725E54]"/>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-[#D5DCF9] to-[#EEF0FC] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">✈️</span>
                 </div>
-                <p className="text-gray-700 font-semibold">No groups yet</p>
-                <p className="text-gray-400 text-sm mt-1 mb-5">Create a group to start splitting</p>
+                <p className="text-gray-900 font-bold text-base">Start your first trip</p>
+                <p className="text-gray-500 text-sm mt-1 mb-5 leading-relaxed">
+                  Add who's going, log expenses in any currency, and we'll work out who owes what.
+                </p>
                 <button onClick={onNew}
-                  className="bg-[#725E54] text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-[#443627] transition-colors">
-                  Create Group
+                  className="bg-[#725E54] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#443627] transition-colors w-full flex items-center justify-center gap-2">
+                  <PlusIco size={16}/>Create your first trip
                 </button>
+                <div className="mt-5 pt-5 border-t border-gray-100">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">Common use cases</p>
+                  <div className="flex flex-wrap gap-1.5 justify-center">
+                    {['🌴 Beach getaway','🏔️ Ski trip','🍽️ Dinner out','🏠 Roommates','🎉 Birthday'].map(t => (
+                      <span key={t} className="text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full">{t}</span>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1224,7 +1352,7 @@
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-400 font-medium">{group.currency}</span>
-              <button onClick={e => { e.stopPropagation(); if (confirm(`Delete "${group.name}"?`)) onDel(); }}
+              <button onClick={e => { e.stopPropagation(); if (confirm(`Delete trip "${group.name}"? This removes all its expenses.`)) onDel(); }}
                 className="p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-lg transition-colors">
                 <TrashIco size={14}/>
               </button>
@@ -1469,10 +1597,210 @@
       );
     }
 
+    // ── Profile View ─────────────────────────────────────────────
+    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport }) {
+      const fileRef = useRef(null);
+
+      const stats = useMemo(() => {
+        const expenses = groups.reduce((s, g) => s + g.expenses.length, 0);
+        const settlements = groups.reduce((s, g) => s + g.settlements.length, 0);
+        const currencies = new Set();
+        groups.forEach(g => {
+          currencies.add(g.currency);
+          g.expenses.forEach(e => currencies.add(e.currency));
+        });
+        const totalByCur = {};
+        groups.forEach(g => {
+          g.expenses.forEach(e => {
+            totalByCur[e.currency] = (totalByCur[e.currency] || 0) + (e.amount || 0);
+          });
+        });
+        return { trips: groups.length, expenses, settlements, currencies: currencies.size, totalByCur };
+      }, [groups]);
+
+      const exportData = () => {
+        const data = {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          groups,
+          prefs,
+          favorites: JSON.parse(localStorage.getItem('spliteasy-fav') || '[]'),
+          order: JSON.parse(localStorage.getItem('spliteasy-order') || '[]'),
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `spliteasy-backup-${isoDate(new Date())}.json`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      };
+
+      const onFile = (e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = (ev) => {
+          try { onImport(JSON.parse(ev.target.result)); }
+          catch { onImport(null); }
+        };
+        r.readAsText(f);
+        e.target.value = '';
+      };
+
+      const Row = ({ icon, label, value, onClick, danger=false, last=false }) => (
+        <button onClick={onClick}
+          className={`w-full px-4 py-3.5 flex items-center justify-between text-left transition-colors hover:bg-gray-50 ${last ? '' : 'border-b border-gray-50'}`}>
+          <span className="flex items-center gap-3">
+            <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${danger ? 'bg-rose-50 text-rose-500' : 'bg-[#EEF0FC] text-[#725E54]'}`}>
+              {icon}
+            </span>
+            <span className={`text-sm font-semibold ${danger ? 'text-rose-600' : 'text-gray-800'}`}>{label}</span>
+          </span>
+          <span className="flex items-center gap-1.5 text-gray-400">
+            {value && <span className="text-sm font-medium">{value}</span>}
+            <ChevRightIco size={14}/>
+          </span>
+        </button>
+      );
+
+      return (
+        <div className="max-w-lg mx-auto pb-24">
+          {/* Header */}
+          <div className="px-4 pt-12 pb-2">
+            <div className="bg-gradient-to-r from-[#443627] to-[#725E54] rounded-2xl px-5 py-3.5 shadow-md">
+              <h1 className="text-base font-bold text-white tracking-tight">Profile</h1>
+              <p className="text-[#D5DCF9]/80 text-xs mt-0.5">Your account & app settings</p>
+            </div>
+          </div>
+
+          <div className="px-4 py-3 space-y-4">
+            {/* Account card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <div className="flex items-center gap-3.5">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#725E54] to-[#A7B0CA] flex items-center justify-center text-white font-bold text-xl">
+                  {(prefs.name || 'G')[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-gray-900">{prefs.name || 'Guest'}</p>
+                  <p className="text-xs text-gray-400">Local account · this device only</p>
+                </div>
+              </div>
+              <div className="mt-4 bg-[#EEF0FC] rounded-xl p-3 flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">
+                  <GlobeIco size={15} cls="text-[#725E54]"/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-[#443627]">Sign in to sync across devices</p>
+                  <p className="text-[11px] text-[#725E54]/70">Coming soon · cloud accounts</p>
+                </div>
+                <span className="text-[10px] font-bold text-[#725E54] bg-white px-2 py-0.5 rounded-full shrink-0">Soon</span>
+              </div>
+            </div>
+
+            {/* Activity stats */}
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Your activity</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
+                  <p className="text-2xl font-bold text-[#443627] tabular-nums">{stats.trips}</p>
+                  <p className="text-[11px] text-gray-400 font-semibold mt-0.5">Trips</p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
+                  <p className="text-2xl font-bold text-[#443627] tabular-nums">{stats.expenses}</p>
+                  <p className="text-[11px] text-gray-400 font-semibold mt-0.5">Expenses</p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
+                  <p className="text-2xl font-bold text-[#443627] tabular-nums">{stats.currencies}</p>
+                  <p className="text-[11px] text-gray-400 font-semibold mt-0.5">Currencies</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Spending breakdown by currency */}
+            {Object.keys(stats.totalByCur).length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Total tracked</p>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-2">
+                  {Object.entries(stats.totalByCur)
+                    .sort((a,b) => b[1]-a[1])
+                    .slice(0, 5)
+                    .map(([cur, total]) => {
+                      const c = getCur(cur);
+                      return (
+                        <div key={cur} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl leading-none">{c?.flag || '🌐'}</span>
+                            <span className="text-sm font-medium text-gray-700">{c?.name || cur}</span>
+                          </div>
+                          <p className="font-bold text-gray-900 tabular-nums text-sm">{fmt(total, cur)}</p>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Preferences */}
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Preferences</p>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3.5 flex items-center justify-between border-b border-gray-50">
+                  <span className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-[#EEF0FC] flex items-center justify-center text-[#725E54]">
+                      <GlobeIco size={15}/>
+                    </span>
+                    <span className="text-sm font-semibold text-gray-800">Default currency</span>
+                  </span>
+                  <select value={prefs.defaultCurrency}
+                    onChange={e => onUpdatePrefs({ defaultCurrency: e.target.value })}
+                    className="bg-transparent text-sm font-bold text-[#443627] focus:outline-none cursor-pointer pr-1">
+                    {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                  </select>
+                </div>
+                <div className="px-4 py-3.5 flex items-center justify-between">
+                  <span className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-[#EEF0FC] flex items-center justify-center text-[#725E54]">
+                      <SparkleIco size={14}/>
+                    </span>
+                    <span className="text-sm font-semibold text-gray-800">Language</span>
+                  </span>
+                  <span className="text-sm text-gray-400">English (UK)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Data */}
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Your data</p>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <Row icon={<DownloadIco size={15}/>} label="Export backup (.json)" onClick={exportData}/>
+                <Row icon={<UploadIco size={15}/>}   label="Import backup"         onClick={() => fileRef.current?.click()}/>
+                <Row icon={<TrashIco size={15}/>}    label="Clear all data"        onClick={onClearData} danger last/>
+                <input ref={fileRef} type="file" accept="application/json" onChange={onFile} className="hidden"/>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2 px-1 leading-relaxed">
+                Your data lives on this device only. Export a backup before clearing your browser.
+              </p>
+            </div>
+
+            {/* About */}
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">About</p>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3 flex items-center justify-between">
+                <span className="text-sm text-gray-700 font-medium">SplitEasy</span>
+                <span className="text-xs text-gray-400">v1.0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // ── Add Group Modal ──────────────────────────────────────────
-    function AddGroupModal({ onClose, onAdd }) {
+    function AddGroupModal({ onClose, onAdd, prefs }) {
       const [name, setName]       = useState('');
-      const [currency, setCur]    = useState('USD');
+      const [currency, setCur]    = useState(prefs?.defaultCurrency || 'USD');
       const [members, setMembers] = useState([{ id: uid(), name:'' }]);
 
       const addRow    = () => setMembers(p => [...p, { id: uid(), name:'' }]);
@@ -1491,14 +1819,14 @@
         <Modal onClose={onClose}>
           <div className="p-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-bold text-gray-900">New Group</h2>
+              <h2 className="text-xl font-bold text-gray-900">New Trip</h2>
               <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
                 <XIco size={20} cls="text-gray-400"/>
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Group name</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Trip name</label>
                 <input autoFocus value={name} onChange={e => setName(e.target.value)}
                   placeholder="e.g. Paris Trip, Roommates…"
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]"/>
@@ -1535,7 +1863,7 @@
             </div>
             <button onClick={submit} disabled={!valid}
               className="mt-6 w-full bg-[#725E54] text-white py-3.5 rounded-xl font-bold hover:bg-[#443627] transition-colors disabled:opacity-40">
-              Create Group
+              Create Trip
             </button>
           </div>
         </Modal>
