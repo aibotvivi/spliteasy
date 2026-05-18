@@ -1,4 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="100" fill="#443627"/>
-  <text x="256" y="360" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="300" font-weight="700" text-anchor="middle" fill="#8EDCE6">S</text>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5C3A26"/>
+      <stop offset="55%" stop-color="#8A6A52"/>
+      <stop offset="100%" stop-color="#B89B86"/>
+    </linearGradient>
+    <linearGradient id="text" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FBF6EF"/>
+    </linearGradient>
+    <radialGradient id="highlight" cx="30%" cy="20%" r="60%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="120" fill="url(#highlight)"/>
+  <text x="256" y="378"
+    font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif"
+    font-size="340" font-weight="900"
+    text-anchor="middle"
+    fill="url(#text)"
+    letter-spacing="-14">S</text>
 </svg>
