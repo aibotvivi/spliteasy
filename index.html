@@ -86,6 +86,9 @@
     input[type=number].no-spin::-webkit-outer-spin-button,
     input[type=number].no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     input[type=number].no-spin { -moz-appearance: textfield; }
+
+    /* iOS Safari auto-zooms when input font-size < 16px. Force min 16px. */
+    input, select, textarea { font-size: 16px; }
   </style>
 </head>
 <body>
@@ -502,6 +505,78 @@
       );
     }
 
+    // ── Swipe-to-reveal row (mobile: swipe left to expose Delete) ───
+    function SwipeRow({ children, onDelete, label = 'Delete' }) {
+      const REVEAL = 84;
+      const [dx, setDx] = useState(0);
+      const [animating, setAnimating] = useState(true);
+      const startX = useRef(null);
+      const startY = useRef(null);
+      const startDx = useRef(0);
+      const decided = useRef(null); // 'h' | 'v' | null
+
+      const onTouchStart = (e) => {
+        startX.current = e.touches[0].clientX;
+        startY.current = e.touches[0].clientY;
+        startDx.current = dx;
+        decided.current = null;
+        setAnimating(false);
+      };
+
+      const onTouchMove = (e) => {
+        if (startX.current == null) return;
+        const dxNew = e.touches[0].clientX - startX.current;
+        const dyNew = e.touches[0].clientY - startY.current;
+        if (decided.current == null) {
+          if (Math.abs(dxNew) > 8 || Math.abs(dyNew) > 8) {
+            decided.current = Math.abs(dxNew) > Math.abs(dyNew) ? 'h' : 'v';
+          }
+        }
+        if (decided.current === 'h') {
+          const target = startDx.current + dxNew;
+          setDx(Math.min(0, Math.max(-REVEAL, target)));
+        }
+      };
+
+      const onTouchEnd = () => {
+        startX.current = null;
+        startY.current = null;
+        setAnimating(true);
+        if (decided.current === 'h') {
+          setDx(dx < -REVEAL / 2 ? -REVEAL : 0);
+        }
+        decided.current = null;
+      };
+
+      const reset = () => { setAnimating(true); setDx(0); };
+
+      return (
+        <div className="relative overflow-hidden rounded-2xl">
+          {/* Delete action behind the row */}
+          <div className="absolute inset-y-0 right-0 flex items-center bg-rose-500 pr-1" style={{ width: REVEAL }}>
+            <button onClick={() => { if (confirm('Delete this entry?')) { onDelete(); reset(); } }}
+              aria-label={label}
+              className="flex flex-col items-center justify-center text-white w-full h-full font-bold gap-0.5 active:bg-rose-600 transition-colors">
+              <TrashIco size={16}/>
+              <span className="text-[11px]">{label}</span>
+            </button>
+          </div>
+          {/* Foreground content slides left to reveal */}
+          <div
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onClick={() => { if (dx !== 0) reset(); }}
+            style={{
+              transform: `translateX(${dx}px)`,
+              transition: animating ? 'transform 0.22s ease-out' : 'none',
+            }}>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
     // ── Searchable Currency Picker ──────────────────────────────
     // variant: 'pill' (small chip), 'pill-dark' (white-on-blue), 'block' (full-width input)
     function CurrencyPicker({ value, onChange, variant='pill', ariaLabel='Select currency', disabled=false }) {
@@ -908,6 +983,15 @@
           ? { ...g, expenses: g.expenses.filter(e => e.id !== eid) } : g));
         toast_('Expense removed');
       };
+      const updateExpense = (eid, patch) => {
+        setGroups(p => p.map(g => g.id === gid
+          ? { ...g, expenses: g.expenses.map(ex => ex.id === eid ? { ...ex, ...patch } : ex) } : g));
+      };
+      const delSettlement = sid => {
+        setGroups(p => p.map(g => g.id === gid
+          ? { ...g, settlements: g.settlements.filter(s => s.id !== sid) } : g));
+        toast_('Settlement removed');
+      };
       const addSettlement = s => {
         setGroups(p => p.map(g => g.id === gid
           ? { ...g, settlements:[...g.settlements, {...s, id:uid(), date:new Date().toISOString()}] } : g));
@@ -972,6 +1056,8 @@
               onAddExp={() => setAddExp(true)}
               onAddMem={() => setAddMem(true)}
               onDelExp={delExpense}
+              onUpdateExp={updateExpense}
+              onDelSettlement={delSettlement}
               onSettle={debt => setSettle(debt)} />
           )}
           {view === 'exchange' && (
@@ -1888,7 +1974,7 @@
     }
 
     // ── Group View ───────────────────────────────────────────────
-    function GroupView({ group, rates, tab, onTab, onBack, onAddExp, onAddMem, onDelExp, onSettle }) {
+    function GroupView({ group, rates, tab, onTab, onBack, onAddExp, onAddMem, onDelExp, onUpdateExp, onDelSettlement, onSettle }) {
       const bal   = useMemo(() => calcBalances(group.members, group.expenses, group.settlements, rates, group.currency), [group, rates]);
       const debts = useMemo(() => simplify(bal), [bal]);
       const byId  = id => group.members.find(m => m.id === id);
@@ -1962,7 +2048,11 @@
                 </div>
               ) : (
                 [...group.expenses].reverse().map(exp => (
-                  <ExpenseItem key={exp.id} exp={exp} group={group} rates={rates} onDel={() => onDelExp(exp.id)}/>
+                  <SwipeRow key={exp.id} onDelete={() => onDelExp(exp.id)}>
+                    <ExpenseItem exp={exp} group={group} rates={rates}
+                      onDel={() => onDelExp(exp.id)}
+                      onUpdate={(patch) => onUpdateExp(exp.id, patch)}/>
+                  </SwipeRow>
                 ))
               )
             )}
@@ -2020,18 +2110,20 @@
                       {[...group.settlements].reverse().map(s => {
                         const f = byId(s.from), t = byId(s.to);
                         return (
-                          <div key={s.id} className="bg-white rounded-xl p-3 flex items-center justify-between border border-gray-100 shadow-sm">
-                            <div className="flex items-center gap-2 text-sm">
-                              <span className="font-medium text-gray-700">{f?.name}</span>
-                              <ArrIco size={13} cls="text-gray-300"/>
-                              <span className="font-medium text-gray-700">{t?.name}</span>
-                              {s.note && <span className="text-gray-500 text-xs">· {s.note}</span>}
+                          <SwipeRow key={s.id} onDelete={() => onDelSettlement(s.id)}>
+                            <div className="bg-white rounded-2xl p-3 flex items-center justify-between border border-gray-100 shadow-sm">
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="font-medium text-gray-700">{f?.name}</span>
+                                <ArrIco size={13} cls="text-gray-300"/>
+                                <span className="font-medium text-gray-700">{t?.name}</span>
+                                {s.note && <span className="text-gray-500 text-xs">· {s.note}</span>}
+                              </div>
+                              <div className="text-right">
+                                <p className="font-semibold text-emerald-600 text-sm">{fmt(s.amount, s.currency)}</p>
+                                <p className="text-xs text-gray-500">{new Date(s.date).toLocaleDateString()}</p>
+                              </div>
                             </div>
-                            <div className="text-right">
-                              <p className="font-semibold text-emerald-600 text-sm">{fmt(s.amount, s.currency)}</p>
-                              <p className="text-xs text-gray-500">{new Date(s.date).toLocaleDateString()}</p>
-                            </div>
-                          </div>
+                          </SwipeRow>
                         );
                       })}
                     </div>
@@ -2051,14 +2143,24 @@
       );
     }
 
-    function ExpenseItem({ exp, group, rates, onDel }) {
+    function ExpenseItem({ exp, group, rates, onDel, onUpdate }) {
       const [open, setOpen]       = useState(false);
       const [viewReceipt, setViewReceipt] = useState(false);
+      const [editing, setEditing] = useState(false);
+      const [editDesc, setEditDesc] = useState(exp.description);
       const payer  = group.members.find(m => m.id === exp.paidBy);
       const inBase = useMemo(() =>
         exp.currency !== group.currency ? convert(exp.amount, exp.currency, group.currency, rates) : null,
         [exp, group.currency, rates]
       );
+
+      const saveEdit = () => {
+        const v = editDesc.trim();
+        if (v && v !== exp.description && onUpdate) onUpdate({ description: v });
+        else setEditDesc(exp.description);
+        setEditing(false);
+      };
+      const cancelEdit = () => { setEditDesc(exp.description); setEditing(false); };
       return (
         <>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
@@ -2100,6 +2202,29 @@
                   </button>
                 </div>
               )}
+              {/* Edit description */}
+              <div className="mb-3">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Name</p>
+                {editing ? (
+                  <div className="flex gap-2">
+                    <input value={editDesc} onChange={e => setEditDesc(e.target.value)}
+                      onBlur={saveEdit}
+                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                      autoFocus
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6] min-w-0"/>
+                    <button onMouseDown={e => { e.preventDefault(); saveEdit(); }}
+                      className="bg-[#725E54] text-white text-xs font-bold px-3 rounded-lg hover:bg-[#443627] transition-colors shrink-0">
+                      Save
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setEditing(true)}
+                    className="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-lg px-3 py-2 transition-colors group">
+                    <span className="text-sm font-semibold text-gray-900 truncate text-left flex-1">{exp.description}</span>
+                    <span className="text-[10px] font-bold text-[#725E54] opacity-60 group-hover:opacity-100 shrink-0 ml-2">Edit</span>
+                  </button>
+                )}
+              </div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Split ({exp.splitMethod})</p>
                 <button onClick={() => { if (confirm('Delete this expense?')) onDel(); }}
@@ -2899,12 +3024,15 @@
                     {scanResult && scanResult.items && scanResult.items.length > 0 && (
                       <div className="border-t border-emerald-200/60 bg-white">
                         <button type="button" onClick={() => setShowItems(v => !v)}
-                          className="w-full px-3 py-2 flex items-center justify-between text-xs font-bold text-gray-700 hover:bg-gray-50">
-                          <span className="flex items-center gap-1.5">
-                            <span className="text-emerald-600">✨</span>
-                            {scanResult.items.length} items detected
+                          aria-expanded={showItems}
+                          className="w-full px-3.5 py-3 flex items-center justify-between text-sm font-bold text-[#443627] hover:bg-emerald-50 active:bg-emerald-100 transition-colors">
+                          <span className="flex items-center gap-2">
+                            <span className="text-emerald-600 text-base">✨</span>
+                            <span>{showItems ? 'Hide' : 'View'} {scanResult.items.length} items</span>
                           </span>
-                          {showItems ? <ChevUpIco size={14} cls="text-gray-500"/> : <ChevDownIco size={14} cls="text-gray-500"/>}
+                          <span className={`w-6 h-6 flex items-center justify-center rounded-full bg-emerald-100 text-emerald-700 transition-transform ${showItems ? 'rotate-180' : ''}`}>
+                            <ChevDownIco size={14}/>
+                          </span>
                         </button>
                         {showItems && (
                           <div className="px-3 pb-2.5 space-y-1">
