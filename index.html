@@ -18,6 +18,7 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <style>
     * { box-sizing: border-box; }
     html, body { overflow-x: hidden; max-width: 100vw; }
@@ -498,6 +499,26 @@
       </svg>
     );
 
+    const BankIco = ({ size=20, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <line x1="3" y1="22" x2="21" y2="22"/>
+        <line x1="6" y1="18" x2="6" y2="11"/>
+        <line x1="10" y1="18" x2="10" y2="11"/>
+        <line x1="14" y1="18" x2="14" y2="11"/>
+        <line x1="18" y1="18" x2="18" y2="11"/>
+        <polygon points="12 2 20 7 4 7"/>
+      </svg>
+    );
+
+    const LinkIco = ({ size=20, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+      </svg>
+    );
+
     // ── Avatar ───────────────────────────────────────────────────
     const Avatar = ({ member, size = 'md', border = false }) => {
       const sizes = { sm:'w-7 h-7 text-xs', md:'w-10 h-10 text-sm', lg:'w-12 h-12 text-sm' };
@@ -713,6 +734,7 @@
           <div className="max-w-lg mx-auto flex">
             <Tab id="home"     Ico={UsersIco}    label="Trips"/>
             <Tab id="exchange" Ico={ExchangeIco} label="Exchange"/>
+            <Tab id="bank"     Ico={BankIco}     label="Bank"/>
             <Tab id="profile"  Ico={ProfileIco}  label="Profile"/>
           </div>
         </div>
@@ -823,6 +845,12 @@
           return s ? JSON.parse(s) : [];
         } catch { return []; }
       });
+      const [plaidItems, setPlaidItems] = useState(() => {
+        try {
+          const s = localStorage.getItem('spliteasy-plaid');
+          return s ? JSON.parse(s) : [];
+        } catch { return []; }
+      });
       const [user, setUser]       = useState(null);
       const [authReady, setAuthReady] = useState(false);
       const [syncStatus, setSyncStatus] = useState('idle'); // idle | syncing | error
@@ -848,6 +876,7 @@
       useEffect(() => { localStorage.setItem('spliteasy-fav', JSON.stringify([...favorites])); }, [favorites]);
       useEffect(() => { localStorage.setItem('spliteasy-order', JSON.stringify(order)); }, [order]);
       useEffect(() => { localStorage.setItem('spliteasy-alerts', JSON.stringify(alerts)); }, [alerts]);
+      useEffect(() => { localStorage.setItem('spliteasy-plaid', JSON.stringify(plaidItems)); }, [plaidItems]);
       const updatePrefs = (patch) => setPrefs(p => ({ ...p, ...patch }));
 
       // ── Auth state listener ──
@@ -892,6 +921,7 @@
             if (Array.isArray(data.data.favorites)) setFavorites(new Set(data.data.favorites));
             if (Array.isArray(data.data.order))     setOrder(data.data.order);
             if (Array.isArray(data.data.alerts))    setAlerts(data.data.alerts);
+            if (Array.isArray(data.data.plaidItems)) setPlaidItems(data.data.plaidItems);
             setLastSync(new Date(data.updated_at));
             toast_('Loaded from cloud');
           } else {
@@ -918,6 +948,7 @@
         favorites: [...favorites],
         order,
         alerts,
+        plaidItems,
       });
 
       // ── Debounced push on data change ──
@@ -932,7 +963,7 @@
           else { setSyncStatus('idle'); setLastSync(new Date()); }
         }, 1200);
         return () => clearTimeout(t);
-      }, [groups, prefs, favorites, order, alerts, user]);
+      }, [groups, prefs, favorites, order, alerts, plaidItems, user]);
 
       // ── Alert checker: fires when rates load + each time rates change ──
       useEffect(() => {
@@ -1021,24 +1052,26 @@
       };
 
       const openGroup = id => { setGid(id); setView('group'); setTab('expenses'); };
-      const showNav = view === 'home' || view === 'exchange' || view === 'profile';
+      const showNav = view === 'home' || view === 'exchange' || view === 'profile' || view === 'bank';
 
       const clearAllData = () => {
-        if (!confirm('Delete all trips, expenses, watchlist, and alerts? This cannot be undone.')) return;
+        if (!confirm('Delete all trips, expenses, watchlist, alerts, and bank links? This cannot be undone.')) return;
         setGroups([]);
         setFavorites(new Set());
         setOrder([]);
         setAlerts([]);
+        setPlaidItems([]);
         toast_('All data cleared');
       };
       const importData = (data) => {
         try {
           if (!Array.isArray(data?.groups)) throw new Error('Invalid file');
           setGroups(data.groups);
-          if (Array.isArray(data.favorites)) setFavorites(new Set(data.favorites));
-          if (Array.isArray(data.order))     setOrder(data.order);
-          if (Array.isArray(data.alerts))    setAlerts(data.alerts);
-          if (data.prefs)                    setPrefs(p => ({ ...p, ...data.prefs }));
+          if (Array.isArray(data.favorites))  setFavorites(new Set(data.favorites));
+          if (Array.isArray(data.order))      setOrder(data.order);
+          if (Array.isArray(data.alerts))     setAlerts(data.alerts);
+          if (Array.isArray(data.plaidItems)) setPlaidItems(data.plaidItems);
+          if (data.prefs)                     setPrefs(p => ({ ...p, ...data.prefs }));
           toast_('Data imported');
         } catch { toast_('Could not read file', 'err'); }
       };
@@ -1047,6 +1080,70 @@
       const addAlert = (a) => setAlerts(p => [...p, { ...a, id: uid(), createdAt: new Date().toISOString(), lastTriggered: null }]);
       const removeAlert = (id) => setAlerts(p => p.filter(a => a.id !== id));
       const toggleAlertPause = (id) => setAlerts(p => p.map(a => a.id === id ? { ...a, paused: !a.paused } : a));
+
+      // ── Plaid helpers ──
+      const plaidUserId = useMemo(() => {
+        if (user?.id) return user.id;
+        // Stable per-device id for guest users
+        let id = localStorage.getItem('spliteasy-plaid-uid');
+        if (!id) { id = 'guest-' + uid() + uid(); localStorage.setItem('spliteasy-plaid-uid', id); }
+        return id;
+      }, [user]);
+
+      const linkBank = async () => {
+        try {
+          // 1. Get a Link token from our edge function
+          const { data, error } = await sb.functions.invoke('plaid-link-token', {
+            body: { userId: plaidUserId },
+          });
+          if (error) throw new Error(error.message || 'Could not start link');
+          if (data?.error) throw new Error(data.error);
+          if (!data?.link_token) throw new Error('No link_token returned');
+
+          // 2. Launch Plaid Link
+          await new Promise((resolve, reject) => {
+            const handler = window.Plaid.create({
+              token: data.link_token,
+              onSuccess: async (publicToken /* , metadata */) => {
+                try {
+                  const ex = await sb.functions.invoke('plaid-exchange', {
+                    body: { publicToken },
+                  });
+                  if (ex.error) throw new Error(ex.error.message || 'Exchange failed');
+                  if (ex.data?.error) throw new Error(ex.data.error);
+                  const item = {
+                    id: uid(),
+                    itemId: ex.data.itemId,
+                    accessToken: ex.data.accessToken,
+                    institutionName: ex.data.institutionName,
+                    accounts: ex.data.accounts || [],
+                    linkedAt: new Date().toISOString(),
+                  };
+                  setPlaidItems(p => [...p, item]);
+                  toast_(`${item.institutionName} linked`);
+                  resolve();
+                } catch (e) {
+                  toast_(e.message || 'Link failed', 'err');
+                  reject(e);
+                }
+              },
+              onExit: (err) => {
+                if (err) toast_(err.display_message || err.error_message || 'Link cancelled', 'err');
+                resolve();
+              },
+            });
+            handler.open();
+          });
+        } catch (e) {
+          toast_(e.message || 'Could not link bank', 'err');
+        }
+      };
+
+      const removeBank = (id) => {
+        if (!confirm('Unlink this bank? The connection will be removed locally.')) return;
+        setPlaidItems(p => p.filter(item => item.id !== id));
+        toast_('Bank unlinked');
+      };
 
       // ── Auth helpers ──
       const sendMagicLink = async (email) => {
@@ -1097,6 +1194,9 @@
               onSendMagicLink={sendMagicLink} onVerifyOtp={verifyEmailOtp} onSignOut={signOut}
               syncStatus={syncStatus} lastSync={lastSync}
               alerts={alerts} onRemoveAlert={removeAlert} onToggleAlertPause={toggleAlertPause} />
+          )}
+          {view === 'bank' && (
+            <BankView plaidItems={plaidItems} onLink={linkBank} onRemove={removeBank} />
           )}
 
           {showNav && <BottomNav view={view} onNav={setView}/>}
@@ -2788,6 +2888,152 @@
                 <span className="text-xs text-gray-500">v1.0</span>
               </div>
             </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Bank View ────────────────────────────────────────────────
+    function BankView({ plaidItems, onLink, onRemove }) {
+      const [linking, setLinking] = useState(false);
+
+      const handleLink = async () => {
+        setLinking(true);
+        try { await onLink(); } finally { setLinking(false); }
+      };
+
+      const totalBalance = useMemo(() => {
+        let t = 0, currency = 'USD';
+        plaidItems.forEach(item => {
+          (item.accounts || []).forEach(a => {
+            const bal = a?.balances?.current;
+            if (typeof bal === 'number') t += bal;
+            const c = a?.balances?.iso_currency_code;
+            if (c) currency = c;
+          });
+        });
+        return { total: t, currency };
+      }, [plaidItems]);
+
+      const accountTypeLabel = (a) => {
+        const s = a.subtype || a.type || 'account';
+        return s.charAt(0).toUpperCase() + s.slice(1);
+      };
+
+      const fmtBalance = (amt, cur) => {
+        if (typeof amt !== 'number') return '—';
+        const sym = getSymbol(cur || 'USD');
+        return `${sym}${amt.toFixed(2)}`;
+      };
+
+      return (
+        <div className="max-w-lg mx-auto pb-24">
+          <div className="px-4 pb-2 page-top">
+            <div className="app-header rounded-2xl px-5 py-3.5">
+              <div className="flex items-center gap-3 relative z-10">
+                <div className="app-logo">
+                  <BankIco size={16} cls="text-[#5C3A26]"/>
+                </div>
+                <div>
+                  <h1 className="text-base font-bold text-white tracking-tight leading-tight">Bank</h1>
+                  <p className="text-[#D5DCF9] text-[11px] leading-tight opacity-90">Link accounts to import transactions</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-4 py-3 space-y-4">
+            {plaidItems.length === 0 ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-[#EEF0FC] to-[#D5DCF9] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <BankIco size={28} cls="text-[#725E54]"/>
+                </div>
+                <p className="text-gray-900 font-bold text-base">No banks linked yet</p>
+                <p className="text-gray-500 text-sm mt-1 mb-5 leading-relaxed">
+                  Link your bank to pull transactions automatically and turn them into trip expenses with one tap.
+                </p>
+                <button onClick={handleLink} disabled={linking}
+                  className="w-full bg-gradient-to-r from-[#443627] to-[#725E54] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-md active:scale-[0.98] transition-all disabled:opacity-50">
+                  {linking ? (
+                    <><RefreshIco size={16} cls="animate-spin"/>Starting…</>
+                  ) : (
+                    <><LinkIco size={16}/>Link a bank account</>
+                  )}
+                </button>
+                <div className="mt-5 pt-5 border-t border-gray-100 text-left">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Sandbox testing</p>
+                  <p className="text-[11px] text-gray-600 leading-relaxed">
+                    Plaid is in sandbox mode — use the test bank (any of Chase / Wells / Bank of America) with login <strong>user_good</strong> / <strong>pass_good</strong>. Real UK banks (Monzo, Barclays, etc.) become available when you upgrade Plaid to Production tier.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Summary */}
+                <div className="bg-gradient-to-br from-[#443627] to-[#725E54] rounded-2xl p-5 shadow-md text-white">
+                  <p className="text-[11px] font-bold text-[#D5DCF9] uppercase tracking-wider opacity-90">Combined balance</p>
+                  <p className="text-3xl font-bold tabular-nums tracking-tight mt-1">
+                    {fmtBalance(totalBalance.total, totalBalance.currency)}
+                  </p>
+                  <p className="text-xs text-[#D5DCF9]/80 mt-1">
+                    {plaidItems.length} bank{plaidItems.length !== 1 ? 's' : ''} · {plaidItems.reduce((s, i) => s + (i.accounts?.length || 0), 0)} accounts
+                  </p>
+                </div>
+
+                {/* Linked items */}
+                {plaidItems.map(item => (
+                  <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#EEF0FC] to-[#D5DCF9] flex items-center justify-center shrink-0">
+                          <BankIco size={16} cls="text-[#725E54]"/>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-900 text-sm truncate">{item.institutionName}</p>
+                          <p className="text-[11px] text-gray-500">{(item.accounts || []).length} accounts · linked {timeAgo(item.linkedAt)}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => onRemove(item.id)} aria-label="Unlink bank"
+                        className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0">
+                        <TrashIco size={14}/>
+                      </button>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {(item.accounts || []).map(a => (
+                        <div key={a.account_id} className="px-4 py-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{a.name}</p>
+                            <p className="text-[11px] text-gray-500">{accountTypeLabel(a)}{a.mask ? ` ··· ${a.mask}` : ''}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="font-bold text-gray-900 tabular-nums text-sm">
+                              {fmtBalance(a.balances?.current, a.balances?.iso_currency_code)}
+                            </p>
+                            {typeof a.balances?.available === 'number' && a.balances.available !== a.balances.current && (
+                              <p className="text-[10px] text-gray-500 tabular-nums">avail {fmtBalance(a.balances.available, a.balances.iso_currency_code)}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Add another bank */}
+                <button onClick={handleLink} disabled={linking}
+                  className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-700 hover:border-[#725E54] hover:text-[#443627] py-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50">
+                  {linking ? (
+                    <><RefreshIco size={16} cls="animate-spin"/>Starting…</>
+                  ) : (
+                    <><PlusIco size={16}/>Link another bank</>
+                  )}
+                </button>
+
+                <p className="text-[11px] text-gray-500 leading-relaxed px-1">
+                  Transactions and "add to trip" coming next session. For now, this confirms the link flow works end-to-end.
+                </p>
+              </>
+            )}
           </div>
         </div>
       );
