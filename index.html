@@ -17,6 +17,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #F5F2F0; }
@@ -64,6 +65,15 @@
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    // ── Supabase client ──────────────────────────────────────────
+    // The anon key is safe to commit — Row-Level Security (set up in SQL)
+    // prevents anyone from accessing another user's row.
+    const SUPABASE_URL = 'https://wkkyoszrdontvziehaku.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indra3lvc3pyZG9udHZ6aWVoYWt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwOTQyODMsImV4cCI6MjA5NDY3MDI4M30.9FF2MLAXEHo9Ks4peFz9CgutpeYyNyVQ9FzAj8ySuFw';
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
 
     // ── Constants ────────────────────────────────────────────────
     const CURRENCIES = [
@@ -521,6 +531,8 @@
         catch { return makeSample(); }
       });
       const [prefs, setPrefs]     = useState(loadPrefs);
+      const [user, setUser]       = useState(null);
+      const [authReady, setAuthReady] = useState(false);
       const [view, setView]       = useState('home');
       const [gid, setGid]         = useState(null);
       const [rates, setRates]     = useState({});
@@ -539,6 +551,23 @@
       useEffect(() => { localStorage.setItem('spliteasy', JSON.stringify(groups)); }, [groups]);
       useEffect(() => { savePrefs(prefs); }, [prefs]);
       const updatePrefs = (patch) => setPrefs(p => ({ ...p, ...patch }));
+
+      // ── Auth state listener ──
+      useEffect(() => {
+        let mounted = true;
+        sb.auth.getSession().then(({ data }) => {
+          if (!mounted) return;
+          setUser(data.session?.user || null);
+          setAuthReady(true);
+        });
+        const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
+          if (!mounted) return;
+          setUser(session?.user || null);
+          if (event === 'SIGNED_IN')  toast_('Signed in');
+          if (event === 'SIGNED_OUT') toast_('Signed out');
+        });
+        return () => { mounted = false; sub.subscription.unsubscribe(); };
+      }, []);
 
       const loadRates = useCallback(async () => {
         setRL(true); setRE(false);
@@ -613,6 +642,18 @@
         } catch { toast_('Could not read file', 'err'); }
       };
 
+      // ── Auth helpers ──
+      const sendMagicLink = async (email) => {
+        const redirectTo = window.location.origin + window.location.pathname;
+        const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
+        if (error) { toast_(error.message || 'Sign-in failed', 'err'); return false; }
+        return true;
+      };
+      const signOut = async () => {
+        const { error } = await sb.auth.signOut();
+        if (error) toast_(error.message || 'Sign-out failed', 'err');
+      };
+
       return (
         <div className="min-h-screen bg-[#F5F2F0]">
           {view === 'home' && (
@@ -634,7 +675,8 @@
           )}
           {view === 'profile' && (
             <ProfileView groups={groups} prefs={prefs} onUpdatePrefs={updatePrefs}
-              onClearData={clearAllData} onImport={importData} />
+              onClearData={clearAllData} onImport={importData}
+              user={user} authReady={authReady} onSendMagicLink={sendMagicLink} onSignOut={signOut} />
           )}
 
           {showNav && <BottomNav view={view} onNav={setView}/>}
@@ -1693,8 +1735,25 @@
     }
 
     // ── Profile View ─────────────────────────────────────────────
-    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport }) {
+    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport, user, authReady, onSendMagicLink, onSignOut }) {
       const fileRef = useRef(null);
+      const [email, setEmail] = useState('');
+      const [sending, setSending] = useState(false);
+      const [sent, setSent] = useState(false);
+      const emailValid = /^\S+@\S+\.\S+$/.test(email.trim());
+
+      const submitSignIn = async (e) => {
+        e?.preventDefault();
+        if (!emailValid || sending) return;
+        setSending(true);
+        const ok = await onSendMagicLink(email.trim());
+        setSending(false);
+        if (ok) setSent(true);
+      };
+
+      const initial = user
+        ? (user.email || '?')[0].toUpperCase()
+        : (prefs.name || 'G')[0].toUpperCase();
 
       const stats = useMemo(() => {
         const expenses = groups.reduce((s, g) => s + g.expenses.length, 0);
@@ -1781,23 +1840,69 @@
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
               <div className="flex items-center gap-3.5">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#725E54] to-[#A7B0CA] flex items-center justify-center text-white font-bold text-xl">
-                  {(prefs.name || 'G')[0].toUpperCase()}
+                  {initial}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-900">{prefs.name || 'Guest'}</p>
-                  <p className="text-xs text-gray-500">Local account · this device only</p>
+                  {user ? (
+                    <>
+                      <p className="font-bold text-gray-900 truncate">{user.email}</p>
+                      <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>Signed in · synced
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-bold text-gray-900">Guest</p>
+                      <p className="text-xs text-gray-500">Local account · this device only</p>
+                    </>
+                  )}
                 </div>
+                {user && (
+                  <button onClick={onSignOut}
+                    className="text-xs font-semibold text-gray-700 hover:text-rose-600 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-rose-200 hover:bg-rose-50 transition-colors shrink-0">
+                    Sign out
+                  </button>
+                )}
               </div>
-              <div className="mt-4 bg-[#EEF0FC] rounded-xl p-3 flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">
-                  <GlobeIco size={15} cls="text-[#725E54]"/>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-[#443627]">Sign in to sync across devices</p>
-                  <p className="text-[11px] text-[#725E54]/70">Coming soon · cloud accounts</p>
-                </div>
-                <span className="text-[10px] font-bold text-[#725E54] bg-white px-2 py-0.5 rounded-full shrink-0">Soon</span>
-              </div>
+
+              {!user && authReady && (
+                sent ? (
+                  <div className="mt-4 bg-emerald-50 border border-emerald-200/60 rounded-xl p-3.5">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <CheckIco size={14} cls="text-white"/>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-emerald-800">Magic link sent</p>
+                        <p className="text-[11px] text-emerald-700 leading-snug mt-0.5">
+                          Check {email} — open the link on this device to sign in. The link expires in 1 hour.
+                        </p>
+                        <button onClick={() => { setSent(false); setEmail(''); }}
+                          className="text-[11px] font-bold text-emerald-700 underline mt-1.5">
+                          Use a different email
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={submitSignIn} className="mt-4 bg-[#EEF0FC] rounded-xl p-3">
+                    <p className="text-[11px] font-bold text-[#443627] uppercase tracking-wider mb-1.5">Sign in to sync across devices</p>
+                    <div className="flex gap-2">
+                      <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                        placeholder="you@email.com" autoComplete="email" inputMode="email"
+                        aria-label="Email address"
+                        className="flex-1 bg-white rounded-lg px-3 py-2 text-sm border border-transparent focus:outline-none focus:border-[#725E54] focus:ring-2 focus:ring-[#725E54]/30 min-w-0"/>
+                      <button type="submit" disabled={!emailValid || sending}
+                        className="bg-[#725E54] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[#443627] active:scale-95 transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
+                        {sending ? '…' : 'Send link'}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-[#725E54] mt-1.5 leading-tight">
+                      No password needed · We'll email you a one-tap link
+                    </p>
+                  </form>
+                )
+              )}
             </div>
 
             {/* Activity stats */}
