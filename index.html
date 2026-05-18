@@ -26,6 +26,38 @@
     @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     input[type=number]::-webkit-inner-spin-button { opacity: 1; }
     select { -webkit-appearance: auto; }
+
+    /* App header — sleek brown gradient with subtle highlight */
+    .app-header {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(120% 100% at 100% 0%, rgba(255,255,255,0.10), transparent 50%),
+        linear-gradient(135deg, #3a2d20 0%, #5a4536 50%, #725E54 100%);
+      box-shadow: 0 4px 14px -4px rgba(68,54,39,0.35), inset 0 1px 0 rgba(255,255,255,0.07);
+    }
+    .app-header::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%);
+      pointer-events: none;
+    }
+    .app-logo {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #8EDCE6, #6BB5BF);
+      color: #2a1f15;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 16px;
+      box-shadow: 0 2px 6px rgba(142,220,230,0.35), inset 0 1px 0 rgba(255,255,255,0.4);
+      letter-spacing: -0.5px;
+    }
+    /* Hide native number-input spinners (we provide our own +/- buttons) */
+    input[type=number].no-spin::-webkit-outer-spin-button,
+    input[type=number].no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number].no-spin { -moz-appearance: textfield; }
   </style>
 </head>
 <body>
@@ -160,6 +192,17 @@
     };
 
     const isoDate = d => d.toISOString().split('T')[0];
+
+    // Smart step for amount +/- buttons (1, 10, 100, 1000 based on size)
+    const stepAmount = (current, setter, dir) => {
+      const cur = parseFloat(current) || 0;
+      let step = 1;
+      if (cur >= 10000) step = 1000;
+      else if (cur >= 1000) step = 100;
+      else if (cur >= 100) step = 10;
+      const next = Math.max(0, cur + dir * step);
+      setter(String(next));
+    };
 
     // ── User preferences (localStorage) ──────────────────────────
     const PREFS_KEY = 'spliteasy-prefs';
@@ -374,8 +417,8 @@
           <button onClick={() => onNav(id)}
             className="flex-1 py-2.5 flex flex-col items-center gap-1 transition-colors relative">
             {active && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-[#725E54] rounded-b-full"/>}
-            <Ico size={22} cls={active ? 'text-[#725E54]' : 'text-[#A7B0CA]'}/>
-            <span className={`text-[11px] font-semibold ${active ? 'text-[#725E54]' : 'text-[#A7B0CA]'}`}>{label}</span>
+            <Ico size={22} cls={active ? 'text-[#725E54]' : 'text-gray-500'}/>
+            <span className={`text-[11px] font-semibold ${active ? 'text-[#725E54]' : 'text-gray-500'}`}>{label}</span>
           </button>
         );
       };
@@ -782,15 +825,21 @@
         <div className="max-w-lg mx-auto pb-24">
           {/* Header */}
           <div className="px-4 pt-12 pb-2">
-            <div className="bg-gradient-to-r from-[#443627] to-[#725E54] rounded-2xl px-5 py-3.5 flex items-center justify-between shadow-md">
-              <div>
-                <h1 className="text-base font-bold text-white tracking-tight">Currency Exchange</h1>
-                <p className="text-[#D5DCF9]/80 text-xs mt-0.5">
-                  {rateLoad ? 'Loading rates…' : rateErr ? 'Using fallback rates' : `Updated ${rateTs ? rateTs.toLocaleTimeString() : '…'}`}
-                </p>
+            <div className="app-header rounded-2xl px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3 relative z-10">
+                <div className="app-logo" style={{background: 'linear-gradient(135deg, #B8E0E5, #8EDCE6)'}}>
+                  <ExchangeIco size={14} cls="text-[#2a1f15]"/>
+                </div>
+                <div>
+                  <h1 className="text-base font-bold text-white tracking-tight leading-tight">Currency Exchange</h1>
+                  <p className="text-[#D5DCF9] text-[11px] leading-tight opacity-90">
+                    {rateLoad ? 'Loading rates…' : rateErr ? 'Using fallback rates' : `Updated ${rateTs ? rateTs.toLocaleTimeString() : '…'}`}
+                  </p>
+                </div>
               </div>
-              <button onClick={onRefresh} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
-                <RefreshIco size={17} cls={rateLoad ? 'text-white animate-spin' : 'text-[#D5DCF9]'}/>
+              <button onClick={onRefresh} aria-label="Refresh rates"
+                className="p-2 hover:bg-white/10 rounded-xl transition-colors relative z-10 focus:outline-none focus:ring-2 focus:ring-white/50">
+                <RefreshIco size={17} cls={rateLoad ? 'text-white animate-spin' : 'text-white'}/>
               </button>
             </div>
           </div>
@@ -802,19 +851,29 @@
               {/* From */}
               <div className="bg-gray-50 rounded-2xl p-4 mb-2 relative">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">You send</p>
+                  <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">You send</p>
                   <div className="relative">
                     <select value={fromCur} onChange={e => setFrom(e.target.value)}
-                      className="font-bold text-gray-900 bg-white border border-gray-200 rounded-full pl-2.5 pr-7 py-1 focus:outline-none cursor-pointer text-sm appearance-none">
+                      aria-label="Currency you're sending"
+                      className="font-bold text-gray-900 bg-white border border-gray-200 rounded-full pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-[#725E54] cursor-pointer text-sm appearance-none">
                       {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
                     </select>
-                    <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                    <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 pointer-events-none"/>
                   </div>
                 </div>
-                <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
-                  min="0" placeholder="0"
-                  className="w-full bg-transparent text-3xl font-bold text-gray-900 focus:outline-none tabular-nums"/>
-                <p className="text-xs text-gray-400 truncate mt-0.5">{fromCurObj?.symbol} {fromCurObj?.name}</p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => stepAmount(amount, setAmount, -1)}
+                    aria-label="Decrease amount"
+                    className="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-700 font-bold text-lg flex items-center justify-center hover:bg-gray-100 active:scale-95 transition-all shrink-0">−</button>
+                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
+                    min="0" placeholder="0" inputMode="decimal"
+                    aria-label="Amount to convert"
+                    className="no-spin flex-1 bg-transparent text-3xl font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#725E54] focus:ring-offset-2 focus:ring-offset-gray-50 rounded-lg tabular-nums text-center min-w-0"/>
+                  <button onClick={() => stepAmount(amount, setAmount, +1)}
+                    aria-label="Increase amount"
+                    className="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-700 font-bold text-lg flex items-center justify-center hover:bg-gray-100 active:scale-95 transition-all shrink-0">+</button>
+                </div>
+                <p className="text-xs text-gray-600 truncate mt-1 text-center">{fromCurObj?.symbol} {fromCurObj?.name}</p>
               </div>
 
               {/* Quick amounts */}
@@ -832,7 +891,7 @@
               {/* Swap */}
               <div className="flex justify-center -my-1 relative z-10">
                 <button onClick={swap}
-                  className="w-11 h-11 bg-white border-4 border-[#F5F2F0] rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md"
+                  className="w-11 h-11 border-4 border-[#F5F2F0] rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]"
                   style={{ backgroundColor: '#725E54' }}
                   aria-label="Swap currencies">
                   <SwapIco size={18} cls="text-white"/>
@@ -865,30 +924,42 @@
                 <p className="text-xs text-[#725E54]/70 truncate mt-0.5">{toCurObj?.name}</p>
               </div>
 
-              {/* Rate info */}
-              {!rateLoad && rate > 0 && fromCur !== toCur && (
-                <div className="mt-4 pt-4 border-t border-gray-100 flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm text-gray-600">
-                      1 <span className="font-bold">{fromCur}</span> = <span className="font-bold text-gray-900">{fmtRate(rate)} {toCur}</span>
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      1 {toCur} = {fmtRate(rateInv)} {fromCur}
-                    </p>
+              {/* Rate info with daily trend */}
+              {!rateLoad && rate > 0 && fromCur !== toCur && (() => {
+                const yRate = (yRates[fromCur] && yRates[toCur])
+                  ? yRates[toCur] / yRates[fromCur] : null;
+                const change = yRate ? (rate - yRate) / yRate * 100 : null;
+                const up = change !== null && change > 0.01;
+                const dn = change !== null && change < -0.01;
+                return (
+                  <div className="mt-4 pt-4 border-t border-gray-100 flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm text-gray-700">
+                        1 <span className="font-bold">{fromCur}</span> = <span className="font-bold text-gray-900">{fmtRate(rate)} {toCur}</span>
+                        {change !== null && (
+                          <span className={`ml-1.5 inline-flex items-center gap-0.5 text-xs font-bold ${up ? 'text-emerald-600' : dn ? 'text-rose-600' : 'text-gray-500'}`}>
+                            {up ? '▲' : dn ? '▼' : '−'} {Math.abs(change).toFixed(2)}%
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        1 {toCur} = {fmtRate(rateInv)} {fromCur} · vs yesterday
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-gray-600 shrink-0 bg-gray-50 px-2 py-1 rounded-full">
+                      <GlobeIco size={11}/>Mid-market
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
-                    <GlobeIco size={12}/>Mid-market rate
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* ── Provider Comparison (same card, separated by border) ── */}
             {showProviders && (
               <div className="border-t border-gray-100 p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Provider Comparison</p>
-                  <span className="text-xs text-gray-400">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Provider Comparison</p>
+                  <span className="text-xs text-gray-500">
                     Sending {fromCurObj?.symbol}{numAmt.toLocaleString()} {fromCur}
                   </span>
                 </div>
@@ -904,31 +975,39 @@
                   return (
                     <>
                       {/* Recommendation banner */}
-                      <div className="flex items-center gap-2.5 bg-emerald-50 rounded-xl px-3.5 py-2.5 mb-3">
-                        <ProviderLogo p={bestProvider} size={7}/>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-emerald-700">
-                            Use {bestProvider.name} for the best rate
-                          </p>
-                          <p className="text-xs text-emerald-600">
-                            You keep {fmtAmt(savingVsWorst)} more than with {worstProvider.name}
-                          </p>
+                      <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/60 rounded-xl px-3.5 py-3 mb-3 border border-emerald-200/50">
+                        <div className="flex items-center gap-2.5">
+                          <ProviderLogo p={bestProvider} size={8}/>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-emerald-800 leading-tight">
+                              Use {bestProvider.name}
+                            </p>
+                            <p className="text-[11px] text-emerald-700 leading-tight mt-0.5">
+                              Best rate for this corridor
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">You save</p>
+                            <p className="text-base font-bold text-emerald-700 tabular-nums leading-tight">{fmtAmt(savingVsWorst)}</p>
+                          </div>
                         </div>
-                        <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">Best</span>
+                        <p className="text-[11px] text-emerald-700/80 mt-2 pt-2 border-t border-emerald-200/50">
+                          vs {worstProvider.name} ({worstProvider.pct}% markup)
+                        </p>
                       </div>
 
                       {/* Mid-market reference row */}
                       <div className="flex items-center justify-between py-2 mb-1 border-b border-dashed border-gray-200">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                            <GlobeIco size={14} cls="text-gray-400"/>
+                            <GlobeIco size={14} cls="text-gray-600"/>
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-gray-500">Google / XE Rate</p>
-                            <p className="text-xs text-gray-400">True mid-market · no one gives you this</p>
+                            <p className="text-xs font-bold text-gray-700">Google / XE Rate</p>
+                            <p className="text-[11px] text-gray-500">True mid-market · no one gives you this</p>
                           </div>
                         </div>
-                        <p className="text-sm font-bold text-gray-400 tabular-nums">{fmtAmt(converted)}</p>
+                        <p className="text-sm font-bold text-gray-700 tabular-nums">{fmtAmt(converted)}</p>
                       </div>
 
                       {/* Provider rows */}
@@ -943,18 +1022,18 @@
                               <ProviderLogo p={p} size={8}/>
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <p className={`text-sm font-bold ${isBank ? 'text-gray-400' : 'text-gray-800'}`}>{p.name}</p>
+                                  <p className={`text-sm font-bold ${isBank ? 'text-gray-500' : 'text-gray-800'}`}>{p.name}</p>
                                   {isBest && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Best</span>}
                                   {isBank && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">Avoid</span>}
                                 </div>
-                                <p className="text-xs text-gray-400">{p.note}</p>
+                                <p className="text-xs text-gray-500">{p.note}</p>
                               </div>
                             </div>
                             <div className="text-right">
                               <p className={`text-sm font-bold tabular-nums ${isBest ? 'text-emerald-700' : isBank ? 'text-amber-600' : 'text-gray-800'}`}>
                                 {fmtAmt(received)}
                               </p>
-                              <p className={`text-xs ${isBank ? 'text-amber-500 font-semibold' : 'text-gray-400'}`}>−{fmtAmt(fee)} in fees</p>
+                              <p className={`text-xs ${isBank ? 'text-amber-500 font-semibold' : 'text-gray-500'}`}>−{fmtAmt(fee)} in fees</p>
                             </div>
                           </div>
                         );
@@ -962,7 +1041,7 @@
                     </>
                   );
                 })()}
-                <p className="text-xs text-gray-300 mt-3 pt-3 border-t border-gray-100 text-center">
+                <p className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100 text-center">
                   Estimates only · Actual fees vary by amount, plan, and destination
                 </p>
               </div>
@@ -978,13 +1057,13 @@
                     {isSearching ? 'Search Results' : 'My Watchlist'}
                   </p>
                   {!isSearching && watchlist.length > 0 && (
-                    <p className="text-xs text-gray-400 font-medium">{watchlist.length} {watchlist.length === 1 ? 'currency' : 'currencies'}</p>
+                    <p className="text-xs text-gray-500 font-medium">{watchlist.length} {watchlist.length === 1 ? 'currency' : 'currencies'}</p>
                   )}
                 </div>
 
                 {/* Search */}
                 <div className="relative">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                   </svg>
                   <input type="text" value={search} onChange={e => setSearch(e.target.value)}
@@ -992,7 +1071,7 @@
                     className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6] focus:border-transparent placeholder-gray-400"/>
                   {search && (
                     <button onClick={() => setSearch('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-600 text-xl leading-none">×</button>
                   )}
                 </div>
               </div>
@@ -1001,18 +1080,26 @@
                 {/* Base amount input — sits at top of list, visually flows into rows */}
                 {!rateLoad && !isSearching && watchlist.length > 0 && (
                   <div className="bg-gradient-to-r from-[#EEF0FC] to-[#D5DCF9]/70 px-4 py-3">
-                    <p className="text-[10px] font-bold text-[#725E54]/70 uppercase tracking-wider mb-1">Showing rates for</p>
+                    <p className="text-[10px] font-bold text-[#725E54] uppercase tracking-wider mb-1.5">Showing rates for</p>
                     <div className="flex items-center gap-2">
-                      <div className="relative">
+                      <div className="relative shrink-0">
                         <select value={watchCur} onChange={e => setWatchCur(e.target.value)}
-                          className="bg-white border border-white rounded-full pl-2.5 pr-7 py-1 font-bold text-[#443627] text-sm focus:outline-none cursor-pointer appearance-none shrink-0">
+                          aria-label="Base currency for watchlist"
+                          className="bg-white border border-white rounded-full pl-2.5 pr-7 py-1.5 font-bold text-[#443627] text-sm focus:outline-none focus:ring-2 focus:ring-[#443627] cursor-pointer appearance-none">
                           {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
                         </select>
-                        <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-[#725E54] pointer-events-none"/>
+                        <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-[#443627] pointer-events-none"/>
                       </div>
+                      <button onClick={() => stepAmount(watchAmt, setWatchAmt, -1)}
+                        aria-label="Decrease amount"
+                        className="w-8 h-8 rounded-full bg-white text-[#443627] font-bold text-lg flex items-center justify-center hover:bg-[#EEF0FC] active:scale-95 transition-all shrink-0 shadow-sm">−</button>
                       <input type="number" value={watchAmt} onChange={e => setWatchAmt(e.target.value)}
-                        min="0" placeholder="0"
-                        className="flex-1 bg-transparent text-[#443627] font-bold text-xl focus:outline-none min-w-0 tabular-nums"/>
+                        min="0" placeholder="0" inputMode="decimal"
+                        aria-label="Amount to compare"
+                        className="no-spin flex-1 bg-transparent text-[#443627] font-bold text-xl focus:outline-none focus:ring-2 focus:ring-[#443627] rounded-lg min-w-0 tabular-nums text-center"/>
+                      <button onClick={() => stepAmount(watchAmt, setWatchAmt, +1)}
+                        aria-label="Increase amount"
+                        className="w-8 h-8 rounded-full bg-white text-[#443627] font-bold text-lg flex items-center justify-center hover:bg-[#EEF0FC] active:scale-95 transition-all shrink-0 shadow-sm">+</button>
                     </div>
                   </div>
                 )}
@@ -1035,7 +1122,7 @@
                 {/* Search results */}
                 {!rateLoad && isSearching && (
                   searchResults.length === 0 ? (
-                    <div className="px-5 py-10 text-center text-gray-400 text-sm">
+                    <div className="px-5 py-10 text-center text-gray-500 text-sm">
                       No results for "{search}"
                     </div>
                   ) : searchResults.map(c => {
@@ -1050,13 +1137,13 @@
                         <span className="text-2xl leading-none shrink-0">{c.flag}</span>
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-gray-900 text-sm">{c.code}</p>
-                          <p className="text-xs text-gray-400 truncate">{c.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{c.name}</p>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="text-right">
                             <p className="font-bold text-gray-800 text-sm tabular-nums">{fmtRate(c.rVsUsd)}</p>
                             {hasChange && (
-                              <p className={`text-xs font-semibold ${up ? 'text-emerald-500' : dn ? 'text-rose-500' : 'text-gray-400'}`}>
+                              <p className={`text-xs font-semibold ${up ? 'text-emerald-500' : dn ? 'text-rose-500' : 'text-gray-500'}`}>
                                 {up ? '+' : ''}{c.change.toFixed(2)}%
                               </p>
                             )}
@@ -1078,7 +1165,7 @@
                         <span className="text-2xl">⭐</span>
                       </div>
                       <p className="text-sm font-bold text-gray-700 mb-1">Build your watchlist</p>
-                      <p className="text-xs text-gray-400 max-w-[14rem] mx-auto leading-relaxed">Search a currency or country above, then tap ★ to follow live rates and 5-year charts.</p>
+                      <p className="text-xs text-gray-500 max-w-[14rem] mx-auto leading-relaxed">Search a currency or country above, then tap ★ to follow live rates and 5-year charts.</p>
                     </div>
                   ) : watchlist.map(c => {
                     const hasChange = c.change !== null;
@@ -1113,7 +1200,7 @@
                         {/* Drag handle */}
                         <div className="shrink-0 cursor-grab active:cursor-grabbing opacity-25 hover:opacity-60"
                           onClick={e => e.stopPropagation()}>
-                          <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" className="text-gray-400">
+                          <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" className="text-gray-500">
                             <circle cx="2.5" cy="2.5" r="1.5"/><circle cx="7.5" cy="2.5" r="1.5"/>
                             <circle cx="2.5" cy="8"   r="1.5"/><circle cx="7.5" cy="8"   r="1.5"/>
                             <circle cx="2.5" cy="13.5" r="1.5"/><circle cx="7.5" cy="13.5" r="1.5"/>
@@ -1122,22 +1209,22 @@
                         <span className="text-2xl leading-none shrink-0">{c.flag}</span>
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-gray-900 text-sm">{c.code}</p>
-                          <p className="text-xs text-gray-400 truncate">{c.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{c.name}</p>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="text-right">
                             {converted !== null ? (
                               <>
                                 <p className="font-bold text-gray-900 text-base tabular-nums">{fmtConverted(converted)}</p>
-                                <p className="text-xs text-gray-400 tabular-nums">
+                                <p className="text-xs text-gray-500 tabular-nums">
                                   1 {watchCur} = {fmtRate(convert(1, watchCur, c.code, rates))} {c.code}
                                 </p>
                               </>
                             ) : (
-                              <p className="font-bold text-gray-400 text-sm tabular-nums">{fmtRate(c.rVsUsd)}</p>
+                              <p className="font-bold text-gray-500 text-sm tabular-nums">{fmtRate(c.rVsUsd)}</p>
                             )}
                             {hasChange && (
-                              <p className={`text-xs font-semibold mt-0.5 ${up ? 'text-emerald-500' : dn ? 'text-rose-500' : 'text-gray-400'}`}>
+                              <p className={`text-xs font-semibold mt-0.5 ${up ? 'text-emerald-500' : dn ? 'text-rose-500' : 'text-gray-500'}`}>
                                 {up ? '+' : ''}{c.change.toFixed(2)}%
                               </p>
                             )}
@@ -1160,7 +1247,7 @@
                             {/* Pair + scrubbed value */}
                             <div className="flex items-center justify-between mb-2.5">
                               <div>
-                                <p className="text-xs text-gray-400">{watchCur} / {c.code}</p>
+                                <p className="text-xs text-gray-500">{watchCur} / {c.code}</p>
                                 {chartData.length > 1 && (
                                   <p className="text-lg font-bold text-gray-900 tabular-nums leading-tight">
                                     {fmtRate(chartActiveIdx !== null ? chartData[chartActiveIdx]?.value : chartData[chartData.length-1]?.value)}
@@ -1198,13 +1285,13 @@
                                 <LineChart data={chartData} color={chartColor}
                                   activeIdx={chartActiveIdx}
                                   onHover={setChartActiveIdx}/>
-                                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                                <div className="flex justify-between text-xs text-gray-500 mt-1">
                                   <span>{chartData[0]?.date}</span>
                                   <span>{chartData[chartData.length-1]?.date}</span>
                                 </div>
                               </>
                             ) : (
-                              <div className="h-20 flex items-center justify-center text-gray-400 text-xs">No data available</div>
+                              <div className="h-20 flex items-center justify-center text-gray-500 text-xs">No data available</div>
                             )}
                           </div>
                         );
@@ -1234,24 +1321,30 @@
       return (
         <div className="max-w-lg mx-auto pb-24">
           <div className="px-4 pt-12 pb-2">
-            <div className="bg-gradient-to-r from-[#443627] to-[#725E54] rounded-2xl px-5 py-3.5 flex items-center justify-between shadow-md">
-              <div>
-                <h1 className="text-base font-bold text-white tracking-tight">SplitEasy</h1>
-                <p className="text-[#D5DCF9]/80 text-xs mt-0.5">Split expenses, stress-free</p>
+            <div className="app-header rounded-2xl px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3 relative z-10">
+                <div className="app-logo">S</div>
+                <div>
+                  <h1 className="text-base font-bold text-white tracking-tight leading-tight">SplitEasy</h1>
+                  <p className="text-[#D5DCF9] text-[11px] leading-tight opacity-90">Split expenses, stress-free</p>
+                </div>
               </div>
+              <div className="relative z-10">
               {rateLoad ? (
-                <span className="text-xs text-[#D5DCF9]/80 flex items-center gap-1">
-                  <RefreshIco size={13} cls="animate-spin text-[#D5DCF9]"/>Loading…
+                <span className="text-[11px] text-white/90 flex items-center gap-1 bg-white/10 px-2 py-1 rounded-full">
+                  <RefreshIco size={11} cls="animate-spin"/>Loading
                 </span>
               ) : rateErr ? (
-                <button onClick={onRefresh} className="text-xs text-[#D5DCF9]/80 flex items-center gap-1 hover:text-white transition-colors">
-                  <RefreshIco size={13}/>Retry
+                <button onClick={onRefresh} aria-label="Retry loading rates"
+                  className="text-[11px] text-white/90 flex items-center gap-1 hover:text-white transition-colors bg-white/10 px-2 py-1 rounded-full">
+                  <RefreshIco size={11}/>Retry
                 </button>
               ) : (
-                <span className="text-xs text-[#D5DCF9]/80 flex items-center gap-1">
-                  <GlobeIco size={13}/>Live rates
+                <span className="text-[11px] text-white flex items-center gap-1 bg-emerald-400/20 border border-emerald-300/30 px-2 py-1 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse"/>Live
                 </span>
               )}
+              </div>
             </div>
           </div>
 
@@ -1259,7 +1352,7 @@
             <div className="flex items-end justify-between mb-4">
               <div>
                 <h2 className="font-bold text-gray-900 text-2xl tracking-tight">Your Trips</h2>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-gray-500 mt-0.5">
                   {groups.length === 0
                     ? 'Track expenses from anywhere'
                     : `${groups.length} ${groups.length === 1 ? 'trip' : 'trips'}${totalOutstanding > 0.01 ? ' · some unsettled' : ''}`}
@@ -1287,7 +1380,7 @@
                   <PlusIco size={16}/>Create your first trip
                 </button>
                 <div className="mt-5 pt-5 border-t border-gray-100">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">Common use cases</p>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2.5">Common use cases</p>
                   <div className="flex flex-wrap gap-1.5 justify-center">
                     {['🌴 Beach getaway','🏔️ Ski trip','🍽️ Dinner out','🏠 Roommates','🎉 Birthday'].map(t => (
                       <span key={t} className="text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full">{t}</span>
@@ -1320,13 +1413,13 @@
                 </div>
                 <div>
                   <p className="font-semibold text-gray-900">{group.name}</p>
-                  <p className="text-sm text-gray-400">{group.members.length} members · {group.expenses.length} expenses</p>
+                  <p className="text-sm text-gray-500">{group.members.length} members · {group.expenses.length} expenses</p>
                 </div>
               </div>
               <div className="text-right">
                 {total > 0.01 ? (
                   <>
-                    <p className="text-xs text-gray-400">outstanding</p>
+                    <p className="text-xs text-gray-500">outstanding</p>
                     <p className="font-bold text-amber-500">{fmt(total, group.currency)}</p>
                   </>
                 ) : (
@@ -1351,7 +1444,7 @@
               )}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400 font-medium">{group.currency}</span>
+              <span className="text-xs text-gray-500 font-medium">{group.currency}</span>
               <button onClick={e => { e.stopPropagation(); if (confirm(`Delete trip "${group.name}"? This removes all its expenses.`)) onDel(); }}
                 className="p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-lg transition-colors">
                 <TrashIco size={14}/>
@@ -1371,24 +1464,26 @@
       return (
         <div className="max-w-lg mx-auto min-h-screen flex flex-col">
           <div className="px-4 pt-12 pb-2">
-            <div className="bg-gradient-to-r from-[#443627] to-[#725E54] rounded-2xl px-4 py-3.5 shadow-md">
-              <div className="flex items-center gap-2 mb-3">
-                <button onClick={onBack} className="p-1.5 hover:bg-white/10 rounded-xl transition-colors">
+            <div className="app-header rounded-2xl px-4 py-3.5">
+              <div className="flex items-center gap-2 mb-3 relative z-10">
+                <button onClick={onBack} aria-label="Back"
+                  className="p-1.5 hover:bg-white/10 rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-white/50">
                   <BackIco size={18} cls="text-white"/>
                 </button>
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-base font-bold text-white truncate tracking-tight">{group.name}</h1>
-                  <p className="text-[#D5DCF9]/80 text-xs">{group.members.length} members · base {group.currency}</p>
+                  <h1 className="text-base font-bold text-white truncate tracking-tight leading-tight">{group.name}</h1>
+                  <p className="text-[#D5DCF9] text-[11px] leading-tight opacity-90">{group.members.length} members · base {group.currency}</p>
                 </div>
-                <button onClick={onAddMem} className="p-1.5 hover:bg-white/10 rounded-xl transition-colors">
-                  <UserPlusIco size={17} cls="text-[#D5DCF9]"/>
+                <button onClick={onAddMem} aria-label="Add member"
+                  className="p-1.5 hover:bg-white/10 rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-white/50">
+                  <UserPlusIco size={17} cls="text-white"/>
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2.5">
+              <div className="flex flex-wrap gap-2.5 relative z-10">
                 {group.members.map(m => (
                   <div key={m.id} className="flex flex-col items-center gap-1">
                     <Avatar member={m} size="md" border/>
-                    <span className="text-xs text-[#D5DCF9]/70 max-w-[48px] truncate text-center">{m.name.split(' ')[0]}</span>
+                    <span className="text-xs text-[#D5DCF9] max-w-[48px] truncate text-center opacity-90">{m.name.split(' ')[0]}</span>
                   </div>
                 ))}
               </div>
@@ -1400,7 +1495,7 @@
               {['expenses','balances'].map(t => (
                 <button key={t} onClick={() => onTab(t)}
                   className={`py-3.5 px-4 text-sm font-semibold capitalize border-b-2 transition-colors ${
-                    tab === t ? 'border-[#8EDCE6] text-[#443627]' : 'border-transparent text-[#A7B0CA] hover:text-gray-600'
+                    tab === t ? 'border-[#8EDCE6] text-[#443627]' : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}>
                   {t}
                   {t === 'balances' && debts.length > 0 && (
@@ -1419,7 +1514,7 @@
                     <ReceiptIco size={26} cls="text-gray-300"/>
                   </div>
                   <p className="text-gray-600 font-semibold">No expenses yet</p>
-                  <p className="text-gray-400 text-sm mt-1">Add your first expense below</p>
+                  <p className="text-gray-500 text-sm mt-1">Add your first expense below</p>
                 </div>
               ) : (
                 [...group.expenses].reverse().map(exp => (
@@ -1431,7 +1526,7 @@
             {tab === 'balances' && (
               <>
                 <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Balances</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Balances</p>
                   <div className="space-y-2">
                     {group.members.map(m => {
                       const b = bal[m.id] || 0;
@@ -1442,15 +1537,15 @@
                             <span className="font-medium text-gray-800 text-sm">{m.name}</span>
                           </div>
                           {Math.abs(b) < 0.01 ? (
-                            <span className="text-xs text-gray-400">settled up</span>
+                            <span className="text-xs text-gray-500">settled up</span>
                           ) : b > 0 ? (
                             <div className="text-right">
-                              <p className="text-xs text-gray-400">gets back</p>
+                              <p className="text-xs text-gray-500">gets back</p>
                               <p className="font-bold text-emerald-500 text-sm">{fmt(b, group.currency)}</p>
                             </div>
                           ) : (
                             <div className="text-right">
-                              <p className="text-xs text-gray-400">owes</p>
+                              <p className="text-xs text-gray-500">owes</p>
                               <p className="font-bold text-rose-500 text-sm">{fmt(-b, group.currency)}</p>
                             </div>
                           )}
@@ -1460,7 +1555,7 @@
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Suggested payments</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Suggested payments</p>
                   {debts.length === 0 ? (
                     <div className="bg-emerald-50 rounded-2xl p-5 text-center">
                       <CheckIco size={24} cls="text-emerald-500 mx-auto mb-1"/>
@@ -1476,7 +1571,7 @@
                 </div>
                 {group.settlements.length > 0 && (
                   <div>
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Payment history</p>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Payment history</p>
                     <div className="space-y-2">
                       {[...group.settlements].reverse().map(s => {
                         const f = byId(s.from), t = byId(s.to);
@@ -1486,11 +1581,11 @@
                               <span className="font-medium text-gray-700">{f?.name}</span>
                               <ArrIco size={13} cls="text-gray-300"/>
                               <span className="font-medium text-gray-700">{t?.name}</span>
-                              {s.note && <span className="text-gray-400 text-xs">· {s.note}</span>}
+                              {s.note && <span className="text-gray-500 text-xs">· {s.note}</span>}
                             </div>
                             <div className="text-right">
                               <p className="font-semibold text-emerald-600 text-sm">{fmt(s.amount, s.currency)}</p>
-                              <p className="text-xs text-gray-400">{new Date(s.date).toLocaleDateString()}</p>
+                              <p className="text-xs text-gray-500">{new Date(s.date).toLocaleDateString()}</p>
                             </div>
                           </div>
                         );
@@ -1527,11 +1622,11 @@
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-gray-900 truncate text-sm">{exp.description}</p>
-              <p className="text-xs text-gray-400">{payer?.name || '?'} paid · {new Date(exp.date).toLocaleDateString()}</p>
+              <p className="text-xs text-gray-500">{payer?.name || '?'} paid · {new Date(exp.date).toLocaleDateString()}</p>
             </div>
             <div className="text-right flex-shrink-0">
               <p className="font-bold text-gray-800 text-sm">{fmt(exp.amount, exp.currency)}</p>
-              {inBase && <p className="text-xs text-gray-400">≈ {fmt(inBase, group.currency)}</p>}
+              {inBase && <p className="text-xs text-gray-500">≈ {fmt(inBase, group.currency)}</p>}
             </div>
             <button onClick={() => setOpen(v => !v)}
               className="p-1.5 text-gray-300 hover:text-gray-500 rounded-lg transition-colors ml-1">
@@ -1541,7 +1636,7 @@
           {open && (
             <div className="border-t border-gray-100 px-3.5 py-3">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Split ({exp.splitMethod})</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Split ({exp.splitMethod})</p>
                 <button onClick={() => { if (confirm('Delete this expense?')) onDel(); }}
                   className="text-xs text-red-400 hover:text-red-600 flex items-center gap-1 transition-colors">
                   <TrashIco size={12}/>Delete
@@ -1657,7 +1752,7 @@
             </span>
             <span className={`text-sm font-semibold ${danger ? 'text-rose-600' : 'text-gray-800'}`}>{label}</span>
           </span>
-          <span className="flex items-center gap-1.5 text-gray-400">
+          <span className="flex items-center gap-1.5 text-gray-500">
             {value && <span className="text-sm font-medium">{value}</span>}
             <ChevRightIco size={14}/>
           </span>
@@ -1668,9 +1763,16 @@
         <div className="max-w-lg mx-auto pb-24">
           {/* Header */}
           <div className="px-4 pt-12 pb-2">
-            <div className="bg-gradient-to-r from-[#443627] to-[#725E54] rounded-2xl px-5 py-3.5 shadow-md">
-              <h1 className="text-base font-bold text-white tracking-tight">Profile</h1>
-              <p className="text-[#D5DCF9]/80 text-xs mt-0.5">Your account & app settings</p>
+            <div className="app-header rounded-2xl px-5 py-3.5">
+              <div className="flex items-center gap-3 relative z-10">
+                <div className="app-logo" style={{background: 'linear-gradient(135deg, #D5DCF9, #A7B0CA)'}}>
+                  <ProfileIco size={14} cls="text-[#2a1f15]"/>
+                </div>
+                <div>
+                  <h1 className="text-base font-bold text-white tracking-tight leading-tight">Profile</h1>
+                  <p className="text-[#D5DCF9] text-[11px] leading-tight opacity-90">Your account & app settings</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1683,7 +1785,7 @@
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-gray-900">{prefs.name || 'Guest'}</p>
-                  <p className="text-xs text-gray-400">Local account · this device only</p>
+                  <p className="text-xs text-gray-500">Local account · this device only</p>
                 </div>
               </div>
               <div className="mt-4 bg-[#EEF0FC] rounded-xl p-3 flex items-center gap-2.5">
@@ -1700,19 +1802,19 @@
 
             {/* Activity stats */}
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Your activity</p>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">Your activity</p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
                   <p className="text-2xl font-bold text-[#443627] tabular-nums">{stats.trips}</p>
-                  <p className="text-[11px] text-gray-400 font-semibold mt-0.5">Trips</p>
+                  <p className="text-[11px] text-gray-500 font-semibold mt-0.5">Trips</p>
                 </div>
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
                   <p className="text-2xl font-bold text-[#443627] tabular-nums">{stats.expenses}</p>
-                  <p className="text-[11px] text-gray-400 font-semibold mt-0.5">Expenses</p>
+                  <p className="text-[11px] text-gray-500 font-semibold mt-0.5">Expenses</p>
                 </div>
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
                   <p className="text-2xl font-bold text-[#443627] tabular-nums">{stats.currencies}</p>
-                  <p className="text-[11px] text-gray-400 font-semibold mt-0.5">Currencies</p>
+                  <p className="text-[11px] text-gray-500 font-semibold mt-0.5">Currencies</p>
                 </div>
               </div>
             </div>
@@ -1720,7 +1822,7 @@
             {/* Spending breakdown by currency */}
             {Object.keys(stats.totalByCur).length > 0 && (
               <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Total tracked</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">Total tracked</p>
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-2">
                   {Object.entries(stats.totalByCur)
                     .sort((a,b) => b[1]-a[1])
@@ -1743,7 +1845,7 @@
 
             {/* Preferences */}
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Preferences</p>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">Preferences</p>
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-4 py-3.5 flex items-center justify-between border-b border-gray-50">
                   <span className="flex items-center gap-3">
@@ -1765,31 +1867,31 @@
                     </span>
                     <span className="text-sm font-semibold text-gray-800">Language</span>
                   </span>
-                  <span className="text-sm text-gray-400">English (UK)</span>
+                  <span className="text-sm text-gray-500">English (UK)</span>
                 </div>
               </div>
             </div>
 
             {/* Data */}
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Your data</p>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">Your data</p>
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <Row icon={<DownloadIco size={15}/>} label="Export backup (.json)" onClick={exportData}/>
                 <Row icon={<UploadIco size={15}/>}   label="Import backup"         onClick={() => fileRef.current?.click()}/>
                 <Row icon={<TrashIco size={15}/>}    label="Clear all data"        onClick={onClearData} danger last/>
                 <input ref={fileRef} type="file" accept="application/json" onChange={onFile} className="hidden"/>
               </div>
-              <p className="text-[11px] text-gray-400 mt-2 px-1 leading-relaxed">
+              <p className="text-[11px] text-gray-500 mt-2 px-1 leading-relaxed">
                 Your data lives on this device only. Export a backup before clearing your browser.
               </p>
             </div>
 
             {/* About */}
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">About</p>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">About</p>
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3 flex items-center justify-between">
                 <span className="text-sm text-gray-700 font-medium">SplitEasy</span>
-                <span className="text-xs text-gray-400">v1.0</span>
+                <span className="text-xs text-gray-500">v1.0</span>
               </div>
             </div>
           </div>
@@ -1821,7 +1923,7 @@
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl font-bold text-gray-900">New Trip</h2>
               <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-                <XIco size={20} cls="text-gray-400"/>
+                <XIco size={20} cls="text-gray-500"/>
               </button>
             </div>
             <div className="space-y-4">
@@ -1883,7 +1985,7 @@
           <div className="p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl font-bold text-gray-900">Add Member</h2>
-              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><XIco size={20} cls="text-gray-400"/></button>
+              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><XIco size={20} cls="text-gray-500"/></button>
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Name</label>
@@ -1892,7 +1994,7 @@
                 placeholder="Enter name"
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]"/>
             </div>
-            <p className="text-xs text-gray-400 mt-3">Adding to: <strong>{group.name}</strong></p>
+            <p className="text-xs text-gray-500 mt-3">Adding to: <strong>{group.name}</strong></p>
             <button onClick={submit} disabled={!name.trim()}
               className="mt-6 w-full bg-[#725E54] text-white py-3.5 rounded-xl font-bold hover:bg-[#443627] transition-colors disabled:opacity-40">
               Add Member
@@ -1957,7 +2059,7 @@
           <div className="p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl font-bold text-gray-900">Add Expense</h2>
-              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><XIco size={20} cls="text-gray-400"/></button>
+              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><XIco size={20} cls="text-gray-500"/></button>
             </div>
             <div className="space-y-4">
               <div>
@@ -2047,7 +2149,7 @@
                       <div key={m.id} className="flex items-center gap-2">
                         <Avatar member={m} size="sm"/>
                         <span className="flex-1 text-sm text-gray-700 font-medium truncate">{m.name}</span>
-                        <span className="text-sm text-gray-400">{getSymbol(currency)}</span>
+                        <span className="text-sm text-gray-500">{getSymbol(currency)}</span>
                         <input type="number" min="0" step="0.01" value={exactV[m.id]}
                           onChange={e => setExactV(p => ({ ...p, [m.id]: e.target.value }))}
                           placeholder="0.00"
@@ -2072,7 +2174,7 @@
                           onChange={e => setPctV(p => ({ ...p, [m.id]: e.target.value }))}
                           placeholder="0"
                           className="w-16 border border-gray-200 rounded-lg px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]"/>
-                        <span className="text-sm text-gray-400 w-4">%</span>
+                        <span className="text-sm text-gray-500 w-4">%</span>
                         {numAmt > 0 && (
                           <span className="text-xs text-gray-500 w-20 text-right">
                             {fmt(numAmt * ((parseFloat(pctV[m.id]) || 0) / 100), currency)}
@@ -2116,13 +2218,13 @@
           <div className="p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl font-bold text-gray-900">Settle Up</h2>
-              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><XIco size={20} cls="text-gray-400"/></button>
+              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><XIco size={20} cls="text-gray-500"/></button>
             </div>
             <div className="bg-gradient-to-br from-[#F5F2F0] to-[#EEF0FC] rounded-2xl p-5 mb-5 flex items-center justify-center gap-6">
               <div className="text-center">
                 <Avatar member={from || {id:'?',name:'?'}} size="lg"/>
                 <p className="text-sm font-semibold text-gray-700 mt-2">{from?.name}</p>
-                <p className="text-xs text-gray-400">pays</p>
+                <p className="text-xs text-gray-500">pays</p>
               </div>
               <div className="flex flex-col items-center gap-1">
                 <ArrIco size={22} cls="text-[#A7B0CA]"/>
@@ -2131,7 +2233,7 @@
               <div className="text-center">
                 <Avatar member={to || {id:'?',name:'?'}} size="lg"/>
                 <p className="text-sm font-semibold text-gray-700 mt-2">{to?.name}</p>
-                <p className="text-xs text-gray-400">receives</p>
+                <p className="text-xs text-gray-500">receives</p>
               </div>
             </div>
             <div className="space-y-4">

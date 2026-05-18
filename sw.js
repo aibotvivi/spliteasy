@@ -1,4 +1,4 @@
-const CACHE = 'spliteasy-v3';
+const CACHE = 'spliteasy-v4';
 const SHELL = ['/spliteasy/', '/spliteasy/index.html', '/spliteasy/manifest.json', '/spliteasy/icon.svg'];
 
 self.addEventListener('install', e => {
