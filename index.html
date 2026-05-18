@@ -213,6 +213,36 @@
       return `${Math.floor(sec/86400)}d ago`;
     };
 
+    // Resize + compress image to a manageable base64 data URL
+    function resizeImage(file, maxDim = 1000, quality = 0.72) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            let { width, height } = img;
+            if (width > height && width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width  = maxDim;
+            } else if (height > maxDim) {
+              width  = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
     // Smart step for amount +/- buttons (1, 10, 100, 1000 based on size)
     const stepAmount = (current, setter, dir) => {
       const cur = parseFloat(current) || 0;
@@ -403,6 +433,22 @@
       </svg>
     );
 
+    const CameraIco = ({ size=20, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+    );
+
+    const BellIco = ({ size=20, cls='' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+    );
+
     // ── Avatar ───────────────────────────────────────────────────
     const Avatar = ({ member, size = 'md', border = false }) => {
       const sizes = { sm:'w-7 h-7 text-xs', md:'w-10 h-10 text-sm', lg:'w-12 h-12 text-sm' };
@@ -426,6 +472,105 @@
             {children}
           </div>
         </div>
+      );
+    }
+
+    // ── Searchable Currency Picker ──────────────────────────────
+    // variant: 'pill' (small chip), 'pill-dark' (white-on-blue), 'block' (full-width input)
+    function CurrencyPicker({ value, onChange, variant='pill', ariaLabel='Select currency', disabled=false }) {
+      const [open, setOpen] = useState(false);
+      const [search, setSearch] = useState('');
+      const current = getCur(value);
+
+      const results = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return CURRENCIES;
+        return CURRENCIES.filter(c =>
+          c.code.toLowerCase().includes(q) ||
+          c.name.toLowerCase().includes(q) ||
+          (c.keywords || '').includes(q)
+        );
+      }, [search]);
+
+      const close = () => { setOpen(false); setSearch(''); };
+      const pick = (code) => { onChange(code); close(); };
+
+      let btnClass = '';
+      let chevColor = 'text-gray-500';
+      if (variant === 'pill') {
+        btnClass = 'inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full pl-2.5 pr-7 py-1 font-bold text-gray-900 text-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#725E54]';
+        chevColor = 'text-gray-700';
+      } else if (variant === 'pill-dark') {
+        btnClass = 'inline-flex items-center gap-1 bg-white border border-white rounded-full pl-2.5 pr-7 py-1.5 font-bold text-[#443627] text-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#443627]';
+        chevColor = 'text-[#443627]';
+      } else if (variant === 'block') {
+        btnClass = 'w-full flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold text-gray-900 hover:border-[#725E54] focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]';
+        chevColor = 'text-gray-500';
+      }
+
+      return (
+        <>
+          <button type="button" onClick={() => !disabled && setOpen(true)}
+            aria-label={ariaLabel} disabled={disabled}
+            className={`relative ${btnClass} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+            <span className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="text-base leading-none shrink-0">{current?.flag || '🌐'}</span>
+              <span className="shrink-0">{value}</span>
+              {variant === 'block' && current?.name && (
+                <span className="font-normal text-gray-500 truncate min-w-0">— {current.name}</span>
+              )}
+            </span>
+            {variant === 'block'
+              ? <ChevDownIco size={14} cls={chevColor + ' shrink-0 ml-1'}/>
+              : <ChevDownIco size={12} cls={`absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${chevColor}`}/>}
+          </button>
+
+          {open && (
+            <Modal onClose={close}>
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Select currency</h2>
+                    <p className="text-xs text-gray-500">Search by code, name, or country</p>
+                  </div>
+                  <button onClick={close} aria-label="Close" className="p-2 hover:bg-gray-100 rounded-xl">
+                    <XIco size={18} cls="text-gray-500"/>
+                  </button>
+                </div>
+                <div className="relative mb-3">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="e.g. Peru, MXN, baht…"
+                    className="w-full pl-10 pr-9 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6] focus:border-transparent"/>
+                  {search && (
+                    <button onClick={() => setSearch('')} aria-label="Clear search"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+                  )}
+                </div>
+                <div className="max-h-[60vh] overflow-y-auto -mx-1 pr-1">
+                  {results.length === 0 ? (
+                    <p className="text-center py-12 text-gray-500 text-sm">No matches for "{search}"</p>
+                  ) : results.map(c => {
+                    const active = c.code === value;
+                    return (
+                      <button key={c.code} onClick={() => pick(c.code)}
+                        className={`w-full px-3 py-2.5 flex items-center gap-3 rounded-xl transition-colors ${active ? 'bg-[#EEF0FC]' : 'hover:bg-gray-50'}`}>
+                        <span className="text-2xl leading-none shrink-0">{c.flag}</span>
+                        <div className="flex-1 text-left min-w-0">
+                          <p className={`font-bold text-sm ${active ? 'text-[#443627]' : 'text-gray-900'}`}>{c.code}</p>
+                          <p className="text-xs text-gray-500 truncate">{c.name}</p>
+                        </div>
+                        {active && <CheckIco size={16} cls="text-[#725E54] shrink-0"/>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </Modal>
+          )}
+        </>
       );
     }
 
@@ -551,6 +696,12 @@
           return Array.isArray(saved) ? saved : [];
         } catch { return []; }
       });
+      const [alerts, setAlerts] = useState(() => {
+        try {
+          const s = localStorage.getItem('spliteasy-alerts');
+          return s ? JSON.parse(s) : [];
+        } catch { return []; }
+      });
       const [user, setUser]       = useState(null);
       const [authReady, setAuthReady] = useState(false);
       const [syncStatus, setSyncStatus] = useState('idle'); // idle | syncing | error
@@ -575,6 +726,7 @@
       useEffect(() => { savePrefs(prefs); }, [prefs]);
       useEffect(() => { localStorage.setItem('spliteasy-fav', JSON.stringify([...favorites])); }, [favorites]);
       useEffect(() => { localStorage.setItem('spliteasy-order', JSON.stringify(order)); }, [order]);
+      useEffect(() => { localStorage.setItem('spliteasy-alerts', JSON.stringify(alerts)); }, [alerts]);
       const updatePrefs = (patch) => setPrefs(p => ({ ...p, ...patch }));
 
       // ── Auth state listener ──
@@ -618,6 +770,7 @@
             if (data.data.prefs)     setPrefs(p => ({ ...p, ...data.data.prefs }));
             if (Array.isArray(data.data.favorites)) setFavorites(new Set(data.data.favorites));
             if (Array.isArray(data.data.order))     setOrder(data.data.order);
+            if (Array.isArray(data.data.alerts))    setAlerts(data.data.alerts);
             setLastSync(new Date(data.updated_at));
             toast_('Loaded from cloud');
           } else {
@@ -643,6 +796,7 @@
         prefs,
         favorites: [...favorites],
         order,
+        alerts,
       });
 
       // ── Debounced push on data change ──
@@ -657,7 +811,30 @@
           else { setSyncStatus('idle'); setLastSync(new Date()); }
         }, 1200);
         return () => clearTimeout(t);
-      }, [groups, prefs, favorites, order, user]);
+      }, [groups, prefs, favorites, order, alerts, user]);
+
+      // ── Alert checker: fires when rates load + each time rates change ──
+      useEffect(() => {
+        if (!rates || !Object.keys(rates).length || !alerts.length) return;
+        const now = Date.now();
+        const triggered = [];
+        setAlerts(prev => prev.map(a => {
+          if (a.paused) return a;
+          // Cool-down: only refire after 12h
+          if (a.lastTriggered && now - new Date(a.lastTriggered).getTime() < 12 * 3600 * 1000) return a;
+          const rate = convert(1, a.baseCur, a.targetCur, rates);
+          if (!rate) return a;
+          const hit = a.direction === 'above' ? rate >= a.threshold : rate <= a.threshold;
+          if (hit) {
+            triggered.push({ ...a, currentRate: rate });
+            return { ...a, lastTriggered: new Date().toISOString() };
+          }
+          return a;
+        }));
+        triggered.forEach(a => {
+          toast_(`🔔 1 ${a.baseCur} = ${fmtRate(a.currentRate)} ${a.targetCur} (target: ${a.direction === 'above' ? '≥' : '≤'} ${fmtRate(a.threshold)})`, 'ok');
+        });
+      }, [rates]);
 
       const loadRates = useCallback(async () => {
         setRL(true); setRE(false);
@@ -714,10 +891,11 @@
       const showNav = view === 'home' || view === 'exchange' || view === 'profile';
 
       const clearAllData = () => {
-        if (!confirm('Delete all trips, expenses, and watchlist data? This cannot be undone.')) return;
+        if (!confirm('Delete all trips, expenses, watchlist, and alerts? This cannot be undone.')) return;
         setGroups([]);
         setFavorites(new Set());
         setOrder([]);
+        setAlerts([]);
         toast_('All data cleared');
       };
       const importData = (data) => {
@@ -726,10 +904,16 @@
           setGroups(data.groups);
           if (Array.isArray(data.favorites)) setFavorites(new Set(data.favorites));
           if (Array.isArray(data.order))     setOrder(data.order);
+          if (Array.isArray(data.alerts))    setAlerts(data.alerts);
           if (data.prefs)                    setPrefs(p => ({ ...p, ...data.prefs }));
           toast_('Data imported');
         } catch { toast_('Could not read file', 'err'); }
       };
+
+      // ── Alert helpers ──
+      const addAlert = (a) => setAlerts(p => [...p, { ...a, id: uid(), createdAt: new Date().toISOString(), lastTriggered: null }]);
+      const removeAlert = (id) => setAlerts(p => p.filter(a => a.id !== id));
+      const toggleAlertPause = (id) => setAlerts(p => p.map(a => a.id === id ? { ...a, paused: !a.paused } : a));
 
       // ── Auth helpers ──
       const sendMagicLink = async (email) => {
@@ -762,13 +946,15 @@
             <ExchangeView rates={rates} rateLoad={rateLoad} rateErr={rateErr}
               rateTs={rateTs} onRefresh={loadRates} prefs={prefs}
               favorites={favorites} setFavorites={setFavorites}
-              order={order} setOrder={setOrder} />
+              order={order} setOrder={setOrder}
+              alerts={alerts} onAddAlert={addAlert} onRemoveAlert={removeAlert} />
           )}
           {view === 'profile' && (
             <ProfileView groups={groups} prefs={prefs} onUpdatePrefs={updatePrefs}
               onClearData={clearAllData} onImport={importData}
               user={user} authReady={authReady} onSendMagicLink={sendMagicLink} onSignOut={signOut}
-              syncStatus={syncStatus} lastSync={lastSync} />
+              syncStatus={syncStatus} lastSync={lastSync}
+              alerts={alerts} onRemoveAlert={removeAlert} onToggleAlertPause={toggleAlertPause} />
           )}
 
           {showNav && <BottomNav view={view} onNav={setView}/>}
@@ -789,7 +975,8 @@
     }
 
     // ── Exchange View ────────────────────────────────────────────
-    function ExchangeView({ rates, rateLoad, rateErr, rateTs, onRefresh, prefs, favorites, setFavorites, order, setOrder }) {
+    function ExchangeView({ rates, rateLoad, rateErr, rateTs, onRefresh, prefs, favorites, setFavorites, order, setOrder, alerts, onAddAlert, onRemoveAlert }) {
+      const [alertModalFor, setAlertModalFor] = useState(null); // { baseCur, targetCur }
       const defaultFrom = prefs?.defaultCurrency || 'GBP';
       const [fromCur, setFrom]       = useState(defaultFrom);
       const [toCur, setTo]           = useState(defaultFrom === 'HKD' ? 'GBP' : 'HKD');
@@ -979,14 +1166,7 @@
               <div className="bg-gray-50 rounded-2xl p-4 mb-2 relative">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">You send</p>
-                  <div className="relative">
-                    <select value={fromCur} onChange={e => setFrom(e.target.value)}
-                      aria-label="Currency you're sending"
-                      className="font-bold text-gray-900 bg-white border border-gray-200 rounded-full pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-[#725E54] cursor-pointer text-sm appearance-none">
-                      {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                    </select>
-                    <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 pointer-events-none"/>
-                  </div>
+                  <CurrencyPicker value={fromCur} onChange={setFrom} ariaLabel="Currency you're sending"/>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => stepAmount(amount, setAmount, -1)}
@@ -1028,14 +1208,8 @@
               {/* To — hero card */}
               <div className="bg-gradient-to-br from-[#EEF0FC] to-[#D5DCF9] rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-bold text-[#725E54]/70 uppercase tracking-wider">You receive</p>
-                  <div className="relative">
-                    <select value={toCur} onChange={e => setTo(e.target.value)}
-                      className="font-bold text-[#443627] bg-white border border-white rounded-full pl-2.5 pr-7 py-1 focus:outline-none cursor-pointer text-sm appearance-none">
-                      {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                    </select>
-                    <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-[#725E54] pointer-events-none"/>
-                  </div>
+                  <p className="text-[11px] font-bold text-[#725E54] uppercase tracking-wider">You receive</p>
+                  <CurrencyPicker value={toCur} onChange={setTo} variant="pill-dark" ariaLabel="Currency you'll receive"/>
                 </div>
                 {rateLoad ? (
                   <div className="h-10 bg-white/50 rounded-lg animate-pulse"/>
@@ -1209,13 +1383,8 @@
                   <div className="bg-gradient-to-r from-[#EEF0FC] to-[#D5DCF9]/70 px-4 py-3">
                     <p className="text-[10px] font-bold text-[#725E54] uppercase tracking-wider mb-1.5">Showing rates for</p>
                     <div className="flex items-center gap-2">
-                      <div className="relative shrink-0">
-                        <select value={watchCur} onChange={e => setWatchCur(e.target.value)}
-                          aria-label="Base currency for watchlist"
-                          className="bg-white border border-white rounded-full pl-2.5 pr-7 py-1.5 font-bold text-[#443627] text-sm focus:outline-none focus:ring-2 focus:ring-[#443627] cursor-pointer appearance-none">
-                          {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                        </select>
-                        <ChevDownIco size={12} cls="absolute right-2 top-1/2 -translate-y-1/2 text-[#443627] pointer-events-none"/>
+                      <div className="shrink-0">
+                        <CurrencyPicker value={watchCur} onChange={setWatchCur} variant="pill-dark" ariaLabel="Base currency for watchlist"/>
                       </div>
                       <button onClick={() => stepAmount(watchAmt, setWatchAmt, -1)}
                         aria-label="Decrease amount"
@@ -1356,7 +1525,20 @@
                               </p>
                             )}
                           </div>
+                          {(() => {
+                            const hasAlert = alerts && alerts.some(a => a.baseCur === watchCur && a.targetCur === c.code && !a.paused);
+                            return (
+                              <button
+                                onClick={e => { e.stopPropagation(); setAlertModalFor({ baseCur: watchCur, targetCur: c.code }); }}
+                                aria-label={`Set rate alert for ${c.code}`}
+                                title="Set rate alert"
+                                className={`p-1 rounded-md hover:bg-[#EEF0FC] active:scale-90 transition-all ${hasAlert ? 'text-amber-500' : 'text-gray-300 hover:text-[#725E54]'}`}>
+                                <BellIco size={16}/>
+                              </button>
+                            );
+                          })()}
                           <button onClick={e => toggleFav(c.code, e)}
+                            aria-label="Remove from watchlist"
                             className="w-7 text-center text-xl leading-none text-[#725E54] hover:scale-110 active:scale-90 transition-all"
                             title="Remove from watchlist">★</button>
                         </div>
@@ -1431,7 +1613,113 @@
               </div>
             </div>
           </div>
+
+          {alertModalFor && (
+            <SetAlertModal
+              baseCur={alertModalFor.baseCur}
+              targetCur={alertModalFor.targetCur}
+              rates={rates}
+              onClose={() => setAlertModalFor(null)}
+              onAdd={(a) => { onAddAlert(a); setAlertModalFor(null); }}
+            />
+          )}
         </div>
+      );
+    }
+
+    // ── Set Alert Modal ──────────────────────────────────────────
+    function SetAlertModal({ baseCur, targetCur, rates, onClose, onAdd }) {
+      const currentRate = useMemo(() => convert(1, baseCur, targetCur, rates), [baseCur, targetCur, rates]);
+      const [direction, setDirection] = useState('above');
+      const [threshold, setThreshold] = useState(() => {
+        if (!currentRate) return '';
+        // Suggest +/-2% from current
+        return (currentRate * 1.02).toFixed(currentRate < 1 ? 4 : 2);
+      });
+      const baseObj   = getCur(baseCur);
+      const targetObj = getCur(targetCur);
+      const numThresh = parseFloat(threshold) || 0;
+      const valid     = numThresh > 0 && currentRate > 0;
+
+      const submit = () => {
+        if (!valid) return;
+        onAdd({ baseCur, targetCur, direction, threshold: numThresh });
+      };
+
+      const setSuggested = (pct) => {
+        const v = currentRate * (1 + pct / 100);
+        setThreshold(v.toFixed(currentRate < 1 ? 4 : 2));
+        setDirection(pct > 0 ? 'above' : 'below');
+      };
+
+      return (
+        <Modal onClose={onClose}>
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><BellIco size={20} cls="text-[#725E54]"/>Set rate alert</h2>
+                <p className="text-xs text-gray-500 mt-0.5">We'll notify you when it hits</p>
+              </div>
+              <button onClick={onClose} aria-label="Close" className="p-2 hover:bg-gray-100 rounded-xl"><XIco size={18} cls="text-gray-500"/></button>
+            </div>
+
+            {/* Current rate display */}
+            <div className="bg-gradient-to-br from-[#EEF0FC] to-[#D5DCF9]/70 rounded-2xl p-4 mb-4">
+              <p className="text-[11px] font-bold text-[#725E54] uppercase tracking-wider">Current rate</p>
+              <p className="text-2xl font-bold text-[#443627] tabular-nums leading-tight mt-0.5">
+                1 {baseObj?.flag} {baseCur} = {fmtRate(currentRate)} {targetObj?.flag} {targetCur}
+              </p>
+            </div>
+
+            {/* Direction */}
+            <p className="text-sm font-semibold text-gray-700 mb-2">Notify me when 1 {baseCur} is…</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button onClick={() => setDirection('above')}
+                className={`py-3 rounded-xl text-sm font-bold transition-all ${direction === 'above' ? 'bg-emerald-500 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600'}`}>
+                ▲ Above
+              </button>
+              <button onClick={() => setDirection('below')}
+                className={`py-3 rounded-xl text-sm font-bold transition-all ${direction === 'below' ? 'bg-rose-500 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600'}`}>
+                ▼ Below
+              </button>
+            </div>
+
+            {/* Threshold */}
+            <p className="text-sm font-semibold text-gray-700 mb-2">Target rate</p>
+            <div className="bg-gray-50 rounded-2xl p-3 mb-2">
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-sm text-gray-500">1 {baseCur} =</span>
+                <input type="number" value={threshold} onChange={e => setThreshold(e.target.value)}
+                  inputMode="decimal" step="any"
+                  className="no-spin flex-1 bg-transparent text-2xl font-bold text-gray-900 focus:outline-none tabular-nums min-w-0"/>
+                <span className="text-sm font-semibold text-gray-700">{targetCur}</span>
+              </div>
+              {numThresh > 0 && currentRate > 0 && (
+                <p className="text-xs text-gray-500">
+                  {((numThresh - currentRate) / currentRate * 100).toFixed(2)}% from current
+                </p>
+              )}
+            </div>
+
+            {/* Quick presets */}
+            <div className="grid grid-cols-4 gap-1.5 mb-5">
+              {[-5, -2, +2, +5].map(p => (
+                <button key={p} onClick={() => setSuggested(p)}
+                  className="py-2 text-xs font-bold border border-gray-200 rounded-lg text-gray-600 hover:border-[#725E54] hover:text-[#443627] transition-all">
+                  {p > 0 ? '+' : ''}{p}%
+                </button>
+              ))}
+            </div>
+
+            <button onClick={submit} disabled={!valid}
+              className="w-full bg-gradient-to-r from-[#443627] to-[#725E54] text-white py-3.5 rounded-xl font-bold hover:shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              <BellIco size={17}/>Create alert
+            </button>
+            <p className="text-[11px] text-gray-500 text-center mt-3 leading-snug">
+              Alerts fire when you open the app and the rate matches. Cool-down: 12h between re-triggers.
+            </p>
+          </div>
+        </Modal>
       );
     }
 
@@ -1743,21 +2031,32 @@
     }
 
     function ExpenseItem({ exp, group, rates, onDel }) {
-      const [open, setOpen] = useState(false);
+      const [open, setOpen]       = useState(false);
+      const [viewReceipt, setViewReceipt] = useState(false);
       const payer  = group.members.find(m => m.id === exp.paidBy);
       const inBase = useMemo(() =>
         exp.currency !== group.currency ? convert(exp.amount, exp.currency, group.currency, rates) : null,
         [exp, group.currency, rates]
       );
       return (
+        <>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
           <button onClick={() => setOpen(v => !v)}
             className="w-full p-3.5 flex items-center gap-3 text-left focus:outline-none focus:bg-gray-50/50">
-            <div className="w-10 h-10 bg-gradient-to-br from-[#EEF0FC] to-[#D5DCF9] rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-              <ReceiptIco size={18} cls="text-[#725E54]"/>
-            </div>
+            {exp.receipt ? (
+              <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 shadow-sm border border-gray-200">
+                <img src={exp.receipt} alt="Receipt" className="w-full h-full object-cover"/>
+              </div>
+            ) : (
+              <div className="w-10 h-10 bg-gradient-to-br from-[#EEF0FC] to-[#D5DCF9] rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
+                <ReceiptIco size={18} cls="text-[#725E54]"/>
+              </div>
+            )}
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-900 truncate text-sm">{exp.description}</p>
+              <p className="font-bold text-gray-900 truncate text-sm flex items-center gap-1.5">
+                {exp.description}
+                {exp.receipt && <CameraIco size={11} cls="text-[#725E54] shrink-0"/>}
+              </p>
               <p className="text-xs text-gray-600">{payer?.name || '?'} paid · {new Date(exp.date).toLocaleDateString()}</p>
             </div>
             <div className="text-right flex-shrink-0">
@@ -1770,10 +2069,20 @@
           </button>
           {open && (
             <div className="border-t border-gray-100 px-3.5 py-3">
+              {exp.receipt && (
+                <div className="mb-3">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Receipt</p>
+                  <button onClick={() => setViewReceipt(true)}
+                    className="block hover:opacity-90 transition-opacity">
+                    <img src={exp.receipt} alt="Receipt"
+                      className="h-24 rounded-xl border border-gray-200 object-cover"/>
+                  </button>
+                </div>
+              )}
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Split ({exp.splitMethod})</p>
                 <button onClick={() => { if (confirm('Delete this expense?')) onDel(); }}
-                  className="text-xs text-red-400 hover:text-red-600 flex items-center gap-1 transition-colors">
+                  className="text-xs text-rose-500 hover:text-rose-700 flex items-center gap-1 transition-colors font-semibold">
                   <TrashIco size={12}/>Delete
                 </button>
               </div>
@@ -1799,6 +2108,20 @@
             </div>
           )}
         </div>
+        {viewReceipt && exp.receipt && (
+          <Modal onClose={() => setViewReceipt(false)}>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="font-bold text-gray-900 text-sm truncate flex-1">{exp.description}</p>
+                <button onClick={() => setViewReceipt(false)} aria-label="Close"
+                  className="p-1.5 hover:bg-gray-100 rounded-lg shrink-0"><XIco size={18} cls="text-gray-500"/></button>
+              </div>
+              <img src={exp.receipt} alt="Receipt"
+                className="w-full max-h-[70vh] object-contain rounded-xl bg-gray-50"/>
+            </div>
+          </Modal>
+        )}
+        </>
       );
     }
 
@@ -1828,7 +2151,7 @@
     }
 
     // ── Profile View ─────────────────────────────────────────────
-    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport, user, authReady, onSendMagicLink, onSignOut, syncStatus, lastSync }) {
+    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport, user, authReady, onSendMagicLink, onSignOut, syncStatus, lastSync, alerts, onRemoveAlert, onToggleAlertPause }) {
       const fileRef = useRef(null);
       const [email, setEmail] = useState('');
       const [sending, setSending] = useState(false);
@@ -2067,11 +2390,9 @@
                     </span>
                     <span className="text-sm font-semibold text-gray-800">Default currency</span>
                   </span>
-                  <select value={prefs.defaultCurrency}
-                    onChange={e => onUpdatePrefs({ defaultCurrency: e.target.value })}
-                    className="bg-transparent text-sm font-bold text-[#443627] focus:outline-none cursor-pointer pr-1">
-                    {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                  </select>
+                  <CurrencyPicker value={prefs.defaultCurrency}
+                    onChange={code => onUpdatePrefs({ defaultCurrency: code })}
+                    ariaLabel="Default currency"/>
                 </div>
                 <div className="px-4 py-3.5 flex items-center justify-between">
                   <span className="flex items-center gap-3">
@@ -2084,6 +2405,46 @@
                 </div>
               </div>
             </div>
+
+            {/* Alerts */}
+            {alerts && alerts.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">Rate alerts</p>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+                  {alerts.map(a => {
+                    const base = getCur(a.baseCur), target = getCur(a.targetCur);
+                    return (
+                      <div key={a.id} className={`px-4 py-3 flex items-center gap-3 ${a.paused ? 'opacity-50' : ''}`}>
+                        <div className="w-9 h-9 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                          <BellIco size={16} cls="text-amber-500"/>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-gray-900 leading-tight">
+                            {base?.flag} {a.baseCur} → {target?.flag} {a.targetCur}
+                          </p>
+                          <p className="text-[11px] text-gray-500 leading-tight mt-0.5">
+                            {a.direction === 'above' ? '▲ above' : '▼ below'} {fmtRate(a.threshold)} · {a.lastTriggered ? `Last fired ${timeAgo(a.lastTriggered)}` : 'Waiting…'}
+                          </p>
+                        </div>
+                        <button onClick={() => onToggleAlertPause(a.id)}
+                          aria-label={a.paused ? 'Resume alert' : 'Pause alert'}
+                          className="text-[11px] font-bold text-gray-600 hover:text-[#443627] px-2 py-1 rounded-md hover:bg-gray-100 transition-colors shrink-0">
+                          {a.paused ? 'Resume' : 'Pause'}
+                        </button>
+                        <button onClick={() => onRemoveAlert(a.id)}
+                          aria-label="Delete alert"
+                          className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0">
+                          <TrashIco size={13}/>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-gray-500 mt-2 px-1 leading-relaxed">
+                  Tap the 🔔 next to a watchlist currency to add an alert. They fire when you open the app.
+                </p>
+              </div>
+            )}
 
             {/* Data */}
             <div>
@@ -2152,10 +2513,7 @@
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Base currency</label>
-                <select value={currency} onChange={e => setCur(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]">
-                  {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code} — {c.name}</option>)}
-                </select>
+                <CurrencyPicker value={currency} onChange={setCur} variant="block" ariaLabel="Base currency for this trip"/>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Members</label>
@@ -2251,6 +2609,9 @@
       const [currency, setCur]  = useState(group.currency);
       const [paidBy, setPaid]   = useState(group.members[0]?.id || '');
       const [method, setMethod] = useState('equal');
+      const [receipt, setReceipt] = useState(null);
+      const [receiptLoad, setReceiptLoad] = useState(false);
+      const fileRef = useRef(null);
       const [selMem, setSelMem] = useState(() => new Set(group.members.map(m => m.id)));
       const [exactV, setExactV] = useState(() => {
         const o = {}; group.members.forEach(m => { o[m.id] = ''; }); return o;
@@ -2262,6 +2623,20 @@
         group.members.forEach((m, i) => { o[m.id] = String(i === 0 ? base + rem : base); });
         return o;
       });
+
+      const onPickPhoto = async (e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        if (!/^image\//.test(f.type)) { e.target.value = ''; return; }
+        setReceiptLoad(true);
+        try {
+          const compressed = await resizeImage(f);
+          setReceipt(compressed);
+        } catch {} finally {
+          setReceiptLoad(false);
+          e.target.value = '';
+        }
+      };
 
       const numAmt = parseFloat(amount) || 0;
 
@@ -2287,7 +2662,7 @@
 
       const submit = () => {
         if (!isValid) return;
-        onAdd({ description: desc.trim(), amount: numAmt, currency, paidBy, splitMethod: method, splits: computedSplits });
+        onAdd({ description: desc.trim(), amount: numAmt, currency, paidBy, splitMethod: method, splits: computedSplits, receipt });
         onClose();
       };
 
@@ -2308,6 +2683,37 @@
                   placeholder="What was this for?"
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]"/>
               </div>
+
+              {/* Receipt photo */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Receipt <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input ref={fileRef} type="file" accept="image/*" capture="environment"
+                  onChange={onPickPhoto} className="hidden"/>
+                {receipt ? (
+                  <div className="relative inline-block group">
+                    <img src={receipt} alt="Receipt preview"
+                      className="h-28 rounded-xl border border-gray-200 object-cover"/>
+                    <button type="button" onClick={() => fileRef.current?.click()}
+                      className="absolute bottom-1.5 left-1.5 bg-white/95 text-gray-700 text-[11px] font-bold px-2 py-1 rounded-lg shadow-sm hover:bg-white">
+                      Replace
+                    </button>
+                    <button type="button" onClick={() => setReceipt(null)}
+                      aria-label="Remove receipt"
+                      className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center hover:bg-rose-600 shadow-md">
+                      <XIco size={13}/>
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => fileRef.current?.click()} disabled={receiptLoad}
+                    className="w-full flex items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-200 text-gray-600 hover:bg-gray-100 hover:border-[#725E54] hover:text-[#443627] rounded-xl py-4 transition-all disabled:opacity-50">
+                    {receiptLoad ? (
+                      <><RefreshIco size={16} cls="animate-spin"/>Processing…</>
+                    ) : (
+                      <><CameraIco size={18}/><span className="text-sm font-semibold">Add receipt photo</span></>
+                    )}
+                  </button>
+                )}
+              </div>
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Amount</label>
@@ -2315,12 +2721,9 @@
                     placeholder="0.00"
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]"/>
                 </div>
-                <div className="w-28">
+                <div className="w-32 shrink-0">
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Currency</label>
-                  <select value={currency} onChange={e => setCur(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]">
-                    {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                  </select>
+                  <CurrencyPicker value={currency} onChange={setCur} variant="block" ariaLabel="Expense currency"/>
                 </div>
               </div>
               {inBase && (
@@ -2483,12 +2886,9 @@
                   <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmt(e.target.value)}
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]"/>
                 </div>
-                <div className="w-28">
+                <div className="w-32 shrink-0">
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Currency</label>
-                  <select value={currency} onChange={e => setCur(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#8EDCE6]">
-                    {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                  </select>
+                  <CurrencyPicker value={currency} onChange={setCur} variant="block" ariaLabel="Expense currency"/>
                 </div>
               </div>
               <div>
