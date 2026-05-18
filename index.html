@@ -949,6 +949,11 @@
         if (error) { toast_(error.message || 'Sign-in failed', 'err'); return false; }
         return true;
       };
+      const verifyEmailOtp = async (email, code) => {
+        const { error } = await sb.auth.verifyOtp({ email, token: code, type: 'email' });
+        if (error) { toast_(error.message || 'Invalid code', 'err'); return false; }
+        return true;
+      };
       const signOut = async () => {
         const { error } = await sb.auth.signOut();
         if (error) toast_(error.message || 'Sign-out failed', 'err');
@@ -979,7 +984,8 @@
           {view === 'profile' && (
             <ProfileView groups={groups} prefs={prefs} onUpdatePrefs={updatePrefs}
               onClearData={clearAllData} onImport={importData}
-              user={user} authReady={authReady} onSendMagicLink={sendMagicLink} onSignOut={signOut}
+              user={user} authReady={authReady}
+              onSendMagicLink={sendMagicLink} onVerifyOtp={verifyEmailOtp} onSignOut={signOut}
               syncStatus={syncStatus} lastSync={lastSync}
               alerts={alerts} onRemoveAlert={removeAlert} onToggleAlertPause={toggleAlertPause} />
           )}
@@ -2166,11 +2172,13 @@
     }
 
     // ── Profile View ─────────────────────────────────────────────
-    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport, user, authReady, onSendMagicLink, onSignOut, syncStatus, lastSync, alerts, onRemoveAlert, onToggleAlertPause }) {
+    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport, user, authReady, onSendMagicLink, onVerifyOtp, onSignOut, syncStatus, lastSync, alerts, onRemoveAlert, onToggleAlertPause }) {
       const fileRef = useRef(null);
       const [email, setEmail] = useState('');
       const [sending, setSending] = useState(false);
       const [sent, setSent] = useState(false);
+      const [otp, setOtp] = useState('');
+      const [verifying, setVerifying] = useState(false);
       const emailValid = /^\S+@\S+\.\S+$/.test(email.trim());
 
       const submitSignIn = async (e) => {
@@ -2180,6 +2188,16 @@
         const ok = await onSendMagicLink(email.trim());
         setSending(false);
         if (ok) setSent(true);
+      };
+
+      const submitVerify = async (e) => {
+        e?.preventDefault();
+        const code = otp.replace(/\s/g, '');
+        if (code.length !== 6 || verifying) return;
+        setVerifying(true);
+        const ok = await onVerifyOtp(email.trim(), code);
+        setVerifying(false);
+        if (ok) { setSent(false); setEmail(''); setOtp(''); }
       };
 
       const initial = user
@@ -2313,23 +2331,40 @@
 
               {!user && authReady && (
                 sent ? (
-                  <div className="mt-4 bg-emerald-50 border border-emerald-200/60 rounded-xl p-3.5">
-                    <div className="flex items-start gap-2.5">
+                  <form onSubmit={submitVerify} className="mt-4 bg-emerald-50 border border-emerald-200/60 rounded-xl p-3.5">
+                    <div className="flex items-start gap-2.5 mb-3">
                       <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
                         <CheckIco size={14} cls="text-white"/>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-emerald-800">Magic link sent</p>
+                        <p className="text-sm font-bold text-emerald-800">Code sent</p>
                         <p className="text-[11px] text-emerald-700 leading-snug mt-0.5">
-                          Check {email} — open the link on this device to sign in. The link expires in 1 hour.
+                          Check {email} for a 6-digit code. Enter it below.
                         </p>
-                        <button onClick={() => { setSent(false); setEmail(''); }}
-                          className="text-[11px] font-bold text-emerald-700 underline mt-1.5">
-                          Use a different email
-                        </button>
                       </div>
                     </div>
-                  </div>
+                    <input type="text" value={otp}
+                      onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="123456"
+                      inputMode="numeric" autoComplete="one-time-code"
+                      aria-label="6-digit code"
+                      maxLength={6}
+                      className="w-full bg-white rounded-lg px-3 py-3 text-center text-2xl font-bold text-[#443627] border border-emerald-200 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 tracking-[0.5em] tabular-nums"/>
+                    <div className="flex gap-2 mt-2.5">
+                      <button type="button"
+                        onClick={() => { setSent(false); setOtp(''); }}
+                        className="flex-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 rounded-lg py-2 transition-colors">
+                        Use different email
+                      </button>
+                      <button type="submit" disabled={otp.length !== 6 || verifying}
+                        className="flex-1 bg-emerald-600 text-white text-sm font-bold py-2 rounded-lg hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                        {verifying ? 'Verifying…' : 'Sign in'}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-emerald-700 mt-2 leading-tight text-center">
+                      Tip: the code is faster than the link, and works inside this installed app.
+                    </p>
+                  </form>
                 ) : (
                   <form onSubmit={submitSignIn} className="mt-4 bg-[#EEF0FC] rounded-xl p-3">
                     <p className="text-[11px] font-bold text-[#443627] uppercase tracking-wider mb-1.5">Sign in to sync across devices</p>
@@ -2340,11 +2375,11 @@
                         className="flex-1 bg-white rounded-lg px-3 py-2 text-sm border border-transparent focus:outline-none focus:border-[#725E54] focus:ring-2 focus:ring-[#725E54]/30 min-w-0"/>
                       <button type="submit" disabled={!emailValid || sending}
                         className="bg-[#725E54] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[#443627] active:scale-95 transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
-                        {sending ? '…' : 'Send link'}
+                        {sending ? '…' : 'Send code'}
                       </button>
                     </div>
                     <p className="text-[10px] text-[#725E54] mt-1.5 leading-tight">
-                      No password needed · We'll email you a one-tap link
+                      No password needed · We'll email you a 6-digit code
                     </p>
                   </form>
                 )
