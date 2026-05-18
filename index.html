@@ -2625,6 +2625,8 @@
       const [scanResult, setScanResult] = useState(null);
       const [scanError, setScanError] = useState(null);
       const [showItems, setShowItems] = useState(true);
+      // itemAssignments: { [itemIndex]: Set<memberId> }
+      const [itemAssignments, setItemAssignments] = useState({});
       const camRef = useRef(null);
       const galRef = useRef(null);
       const [selMem, setSelMem] = useState(() => new Set(group.members.map(m => m.id)));
@@ -2654,11 +2656,36 @@
           if (data.currency && CURRENCIES.some(c => c.code === data.currency)) setCur(data.currency);
           setScanResult(data);
           setShowItems(true);
+          // Pre-assign each item to ALL members by default (equal split)
+          if (Array.isArray(data.items)) {
+            const init = {};
+            data.items.forEach((_, i) => {
+              init[i] = new Set(group.members.map(m => m.id));
+            });
+            setItemAssignments(init);
+          }
         } catch (err) {
           setScanError(err?.message || 'Could not read this receipt');
         } finally {
           setScanning(false);
         }
+      };
+
+      const toggleItemMember = (idx, memberId) => {
+        setItemAssignments(prev => {
+          const next = { ...prev };
+          const set = new Set(next[idx] || []);
+          set.has(memberId) ? set.delete(memberId) : set.add(memberId);
+          next[idx] = set;
+          return next;
+        });
+      };
+
+      const setAllForItem = (idx, all) => {
+        setItemAssignments(prev => ({
+          ...prev,
+          [idx]: all ? new Set(group.members.map(m => m.id)) : new Set()
+        }));
       };
 
       const onPickPhoto = async (e) => {
@@ -2688,11 +2715,36 @@
           if (inc.length > 0) { const share = numAmt / inc.length; inc.forEach(id => { s[id] = share; }); }
         } else if (method === 'exact') {
           group.members.forEach(m => { s[m.id] = parseFloat(exactV[m.id]) || 0; });
-        } else {
+        } else if (method === 'percentage') {
           group.members.forEach(m => { s[m.id] = numAmt * ((parseFloat(pctV[m.id]) || 0) / 100); });
+        } else if (method === 'items' && scanResult && Array.isArray(scanResult.items)) {
+          const items = scanResult.items;
+          const subtotal = items.reduce((acc, it) => acc + (it.amount || 0), 0);
+          const tax = scanResult.tax || 0;
+          const tip = scanResult.tip || 0;
+          const extras = tax + tip;
+          items.forEach((it, i) => {
+            const assigned = itemAssignments[i];
+            const amt = it.amount || 0;
+            if (!assigned || assigned.size === 0) {
+              // Unassigned -> split equally among all members
+              const share = amt / group.members.length;
+              group.members.forEach(m => { s[m.id] += share; });
+            } else {
+              const share = amt / assigned.size;
+              assigned.forEach(mid => { if (s[mid] !== undefined) s[mid] += share; });
+            }
+          });
+          // Tax / tip distributed proportionally to each person's item share
+          if (subtotal > 0 && extras > 0) {
+            group.members.forEach(m => { s[m.id] += (s[m.id] / subtotal) * extras; });
+          } else if (extras > 0) {
+            const share = extras / group.members.length;
+            group.members.forEach(m => { s[m.id] += share; });
+          }
         }
         return s;
-      }, [method, selMem, exactV, pctV, numAmt, group.members]);
+      }, [method, selMem, exactV, pctV, numAmt, group.members, scanResult, itemAssignments]);
 
       const splitTotal = Object.values(computedSplits).reduce((s, v) => s + v, 0);
       const exactTotal = Object.values(exactV).reduce((s, v) => s + (parseFloat(v) || 0), 0);
@@ -2896,6 +2948,17 @@
                     </button>
                   ))}
                 </div>
+                {scanResult && Array.isArray(scanResult.items) && scanResult.items.length > 0 && (
+                  <button onClick={() => setMethod('items')}
+                    className={`mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${
+                      method === 'items'
+                        ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border-transparent shadow-sm'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    }`}>
+                    <SparkleIco size={14}/>
+                    {method === 'items' ? 'Itemised split active' : 'Split by items (from receipt)'}
+                  </button>
+                )}
               </div>
               {method === 'equal' && (
                 <div>
@@ -2966,6 +3029,87 @@
                     ))}
                     <div className={`flex justify-between text-sm font-bold pt-1 ${Math.abs(pctTotal - 100) < 0.5 ? 'text-emerald-500' : 'text-amber-500'}`}>
                       <span>Total</span><span>{pctTotal.toFixed(1)}% / 100%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {method === 'items' && scanResult && Array.isArray(scanResult.items) && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Who had what?
+                  </label>
+                  <p className="text-[11px] text-gray-500 mb-2.5 leading-snug">
+                    Tap a member to add or remove them for each item. Tax &amp; tip
+                    split proportionally to each person's share.
+                  </p>
+                  <div className="space-y-2">
+                    {scanResult.items.map((item, i) => {
+                      const assigned = itemAssignments[i] || new Set();
+                      const allOn = assigned.size === group.members.length;
+                      const noneOn = assigned.size === 0;
+                      return (
+                        <div key={i} className="bg-gray-50 border border-gray-100 rounded-xl p-2.5">
+                          <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                            <p className="text-sm font-semibold text-gray-900 truncate flex-1">{item.description}</p>
+                            <p className="text-sm font-bold tabular-nums shrink-0">{fmt(item.amount, currency)}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mb-1.5">
+                            {group.members.map(m => {
+                              const on = assigned.has(m.id);
+                              return (
+                                <button key={m.id} onClick={() => toggleItemMember(i, m.id)}
+                                  className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold transition-all ${
+                                    on
+                                      ? 'bg-[#725E54] text-white shadow-sm'
+                                      : 'bg-white text-gray-500 border border-gray-200 hover:border-[#725E54]'
+                                  }`}>
+                                  <Avatar member={m} size="sm"/>
+                                  <span>{m.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex gap-1">
+                              <button onClick={() => setAllForItem(i, true)}
+                                disabled={allOn}
+                                className="text-[10px] font-bold text-[#725E54] hover:text-[#443627] disabled:opacity-40">
+                                All
+                              </button>
+                              <span className="text-gray-300 text-[10px]">·</span>
+                              <button onClick={() => setAllForItem(i, false)}
+                                disabled={noneOn}
+                                className="text-[10px] font-bold text-gray-500 hover:text-gray-700 disabled:opacity-40">
+                                None
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-gray-500">
+                              {noneOn ? 'Split equally if no one assigned' :
+                                `${fmt(item.amount / assigned.size, currency)} each (${assigned.size}/${group.members.length})`}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Per-member totals */}
+                  <div className="mt-3 bg-white border border-gray-100 rounded-xl p-3">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Each person owes</p>
+                    <div className="space-y-1">
+                      {group.members.map(m => (
+                        <div key={m.id} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <Avatar member={m} size="sm"/>
+                            <span className="text-gray-800 font-medium">{m.name}</span>
+                          </div>
+                          <span className="font-bold tabular-nums text-[#443627]">{fmt(computedSplits[m.id] || 0, currency)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={`flex justify-between text-xs font-bold pt-2 mt-2 border-t border-gray-100 ${Math.abs(splitTotal - numAmt) < 0.02 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      <span>Total assigned</span>
+                      <span className="tabular-nums">{fmt(splitTotal, currency)} / {fmt(numAmt, currency)}</span>
                     </div>
                   </div>
                 </div>
