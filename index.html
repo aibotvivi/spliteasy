@@ -203,6 +203,16 @@
 
     const isoDate = d => d.toISOString().split('T')[0];
 
+    const timeAgo = (date) => {
+      if (!date) return '';
+      const sec = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+      if (sec < 5)   return 'just now';
+      if (sec < 60)  return `${sec}s ago`;
+      if (sec < 3600) return `${Math.floor(sec/60)}m ago`;
+      if (sec < 86400) return `${Math.floor(sec/3600)}h ago`;
+      return `${Math.floor(sec/86400)}d ago`;
+    };
+
     // Smart step for amount +/- buttons (1, 10, 100, 1000 based on size)
     const stepAmount = (current, setter, dir) => {
       const cur = parseFloat(current) || 0;
@@ -531,8 +541,21 @@
         catch { return makeSample(); }
       });
       const [prefs, setPrefs]     = useState(loadPrefs);
+      const [favorites, setFavorites] = useState(() => {
+        try { return new Set(JSON.parse(localStorage.getItem('spliteasy-fav') || '[]')); }
+        catch { return new Set(); }
+      });
+      const [order, setOrder] = useState(() => {
+        try {
+          const saved = JSON.parse(localStorage.getItem('spliteasy-order') || '[]');
+          return Array.isArray(saved) ? saved : [];
+        } catch { return []; }
+      });
       const [user, setUser]       = useState(null);
       const [authReady, setAuthReady] = useState(false);
+      const [syncStatus, setSyncStatus] = useState('idle'); // idle | syncing | error
+      const [lastSync, setLastSync] = useState(null);
+      const initialSyncDone = useRef(false);
       const [view, setView]       = useState('home');
       const [gid, setGid]         = useState(null);
       const [rates, setRates]     = useState({});
@@ -550,6 +573,8 @@
 
       useEffect(() => { localStorage.setItem('spliteasy', JSON.stringify(groups)); }, [groups]);
       useEffect(() => { savePrefs(prefs); }, [prefs]);
+      useEffect(() => { localStorage.setItem('spliteasy-fav', JSON.stringify([...favorites])); }, [favorites]);
+      useEffect(() => { localStorage.setItem('spliteasy-order', JSON.stringify(order)); }, [order]);
       const updatePrefs = (patch) => setPrefs(p => ({ ...p, ...patch }));
 
       // ── Auth state listener ──
@@ -564,10 +589,75 @@
           if (!mounted) return;
           setUser(session?.user || null);
           if (event === 'SIGNED_IN')  toast_('Signed in');
-          if (event === 'SIGNED_OUT') toast_('Signed out');
+          if (event === 'SIGNED_OUT') { toast_('Signed out'); initialSyncDone.current = false; setLastSync(null); }
         });
         return () => { mounted = false; sub.subscription.unsubscribe(); };
       }, []);
+
+      // ── Initial cloud sync on sign-in ──
+      useEffect(() => {
+        if (!user) return;
+        let cancelled = false;
+        (async () => {
+          setSyncStatus('syncing');
+          const { data, error } = await sb
+            .from('user_data')
+            .select('data, updated_at')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          if (cancelled) return;
+          if (error) {
+            setSyncStatus('error');
+            toast_('Sync error: ' + error.message, 'err');
+            initialSyncDone.current = true;
+            return;
+          }
+          const cloudHasData = data && data.data && data.data.groups && data.data.groups.length > 0;
+          if (cloudHasData) {
+            setGroups(data.data.groups);
+            if (data.data.prefs)     setPrefs(p => ({ ...p, ...data.data.prefs }));
+            if (Array.isArray(data.data.favorites)) setFavorites(new Set(data.data.favorites));
+            if (Array.isArray(data.data.order))     setOrder(data.data.order);
+            setLastSync(new Date(data.updated_at));
+            toast_('Loaded from cloud');
+          } else {
+            // First-time sign in OR cloud was empty → push local up
+            const payload = buildSyncPayload();
+            const { error: upErr } = await sb
+              .from('user_data')
+              .upsert({ user_id: user.id, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+            if (!cancelled) {
+              if (upErr) { setSyncStatus('error'); toast_('Upload error: ' + upErr.message, 'err'); }
+              else { setLastSync(new Date()); toast_('Backed up to cloud'); }
+            }
+          }
+          initialSyncDone.current = true;
+          setSyncStatus('idle');
+        })();
+        return () => { cancelled = true; };
+      }, [user]);
+
+      const buildSyncPayload = () => ({
+        version: 1,
+        groups,
+        prefs,
+        favorites: [...favorites],
+        order,
+      });
+
+      // ── Debounced push on data change ──
+      useEffect(() => {
+        if (!user || !initialSyncDone.current) return;
+        setSyncStatus('syncing');
+        const t = setTimeout(async () => {
+          const { error } = await sb
+            .from('user_data')
+            .upsert({ user_id: user.id, data: buildSyncPayload(), updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+          if (error) { setSyncStatus('error'); }
+          else { setSyncStatus('idle'); setLastSync(new Date()); }
+        }, 1200);
+        return () => clearTimeout(t);
+      }, [groups, prefs, favorites, order, user]);
 
       const loadRates = useCallback(async () => {
         setRL(true); setRE(false);
@@ -625,18 +715,17 @@
 
       const clearAllData = () => {
         if (!confirm('Delete all trips, expenses, and watchlist data? This cannot be undone.')) return;
-        localStorage.removeItem('spliteasy');
-        localStorage.removeItem('spliteasy-fav');
-        localStorage.removeItem('spliteasy-order');
         setGroups([]);
+        setFavorites(new Set());
+        setOrder([]);
         toast_('All data cleared');
       };
       const importData = (data) => {
         try {
           if (!Array.isArray(data?.groups)) throw new Error('Invalid file');
           setGroups(data.groups);
-          if (Array.isArray(data.favorites)) localStorage.setItem('spliteasy-fav', JSON.stringify(data.favorites));
-          if (Array.isArray(data.order))     localStorage.setItem('spliteasy-order', JSON.stringify(data.order));
+          if (Array.isArray(data.favorites)) setFavorites(new Set(data.favorites));
+          if (Array.isArray(data.order))     setOrder(data.order);
           if (data.prefs)                    setPrefs(p => ({ ...p, ...data.prefs }));
           toast_('Data imported');
         } catch { toast_('Could not read file', 'err'); }
@@ -671,12 +760,15 @@
           )}
           {view === 'exchange' && (
             <ExchangeView rates={rates} rateLoad={rateLoad} rateErr={rateErr}
-              rateTs={rateTs} onRefresh={loadRates} prefs={prefs} />
+              rateTs={rateTs} onRefresh={loadRates} prefs={prefs}
+              favorites={favorites} setFavorites={setFavorites}
+              order={order} setOrder={setOrder} />
           )}
           {view === 'profile' && (
             <ProfileView groups={groups} prefs={prefs} onUpdatePrefs={updatePrefs}
               onClearData={clearAllData} onImport={importData}
-              user={user} authReady={authReady} onSendMagicLink={sendMagicLink} onSignOut={signOut} />
+              user={user} authReady={authReady} onSendMagicLink={sendMagicLink} onSignOut={signOut}
+              syncStatus={syncStatus} lastSync={lastSync} />
           )}
 
           {showNav && <BottomNav view={view} onNav={setView}/>}
@@ -697,7 +789,7 @@
     }
 
     // ── Exchange View ────────────────────────────────────────────
-    function ExchangeView({ rates, rateLoad, rateErr, rateTs, onRefresh, prefs }) {
+    function ExchangeView({ rates, rateLoad, rateErr, rateTs, onRefresh, prefs, favorites, setFavorites, order, setOrder }) {
       const defaultFrom = prefs?.defaultCurrency || 'GBP';
       const [fromCur, setFrom]       = useState(defaultFrom);
       const [toCur, setTo]           = useState(defaultFrom === 'HKD' ? 'GBP' : 'HKD');
@@ -712,23 +804,13 @@
       const [watchAmt, setWatchAmt]  = useState('100');
       const [watchCur, setWatchCur]  = useState(defaultFrom);
 
-      // Favorites: Set of currency codes
-      const [favorites, setFavorites] = useState(() => {
-        try { return new Set(JSON.parse(localStorage.getItem('spliteasy-fav') || '[]')); }
-        catch { return new Set(); }
-      });
-
-      // Custom order: array of currency codes
-      const [order, setOrder] = useState(() => {
-        try {
-          const saved = JSON.parse(localStorage.getItem('spliteasy-order') || '[]');
-          const codes = CURRENCIES.map(c => c.code);
-          // Merge: keep saved order for known codes, append any new ones
-          const valid = saved.filter(c => codes.includes(c));
-          const missing = codes.filter(c => !valid.includes(c));
-          return [...valid, ...missing];
-        } catch { return CURRENCIES.map(c => c.code); }
-      });
+      // Merge new currencies into order if any are missing
+      const mergedOrder = useMemo(() => {
+        const codes = CURRENCIES.map(c => c.code);
+        const valid = order.filter(c => codes.includes(c));
+        const missing = codes.filter(c => !valid.includes(c));
+        return [...valid, ...missing];
+      }, [order]);
 
       const dragItem = useRef(null);
       const [dragOver, setDragOver] = useState(null);
@@ -738,7 +820,6 @@
         setFavorites(prev => {
           const next = new Set(prev);
           next.has(code) ? next.delete(code) : next.add(code);
-          localStorage.setItem('spliteasy-fav', JSON.stringify([...next]));
           return next;
         });
       };
@@ -759,12 +840,16 @@
         const from = dragItem.current;
         if (!from || from === targetCode) { setDragOver(null); return; }
         setOrder(prev => {
-          const next = [...prev];
+          // Work against merged order so missing codes get inserted before we move
+          const codes = CURRENCIES.map(c => c.code);
+          const validPrev = prev.filter(c => codes.includes(c));
+          const missing = codes.filter(c => !validPrev.includes(c));
+          const next = [...validPrev, ...missing];
           const fi = next.indexOf(from);
           const ti = next.indexOf(targetCode);
+          if (fi === -1 || ti === -1) return prev;
           next.splice(fi, 1);
           next.splice(ti, 0, from);
-          localStorage.setItem('spliteasy-order', JSON.stringify(next));
           return next;
         });
         setDragOver(null);
@@ -854,9 +939,9 @@
       // Watchlist: only favorited currencies in custom drag order
       const watchlist = useMemo(() => {
         const d = marketRows.filter(c => favorites.has(c.code));
-        d.sort((a, b) => order.indexOf(a.code) - order.indexOf(b.code));
+        d.sort((a, b) => mergedOrder.indexOf(a.code) - mergedOrder.indexOf(b.code));
         return d;
-      }, [marketRows, favorites, order]);
+      }, [marketRows, favorites, mergedOrder]);
 
       const watchNumAmt = parseFloat(watchAmt) || 0;
 
@@ -1743,7 +1828,7 @@
     }
 
     // ── Profile View ─────────────────────────────────────────────
-    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport, user, authReady, onSendMagicLink, onSignOut }) {
+    function ProfileView({ groups, prefs, onUpdatePrefs, onClearData, onImport, user, authReady, onSendMagicLink, onSignOut, syncStatus, lastSync }) {
       const fileRef = useRef(null);
       const [email, setEmail] = useState('');
       const [sending, setSending] = useState(false);
@@ -1854,9 +1939,24 @@
                   {user ? (
                     <>
                       <p className="font-bold text-gray-900 truncate">{user.email}</p>
-                      <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>Signed in · synced
-                      </p>
+                      {syncStatus === 'syncing' ? (
+                        <p className="text-xs text-[#725E54] font-semibold flex items-center gap-1.5">
+                          <RefreshIco size={11} cls="animate-spin"/>Syncing…
+                        </p>
+                      ) : syncStatus === 'error' ? (
+                        <p className="text-xs text-rose-600 font-semibold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"/>Sync error
+                        </p>
+                      ) : lastSync ? (
+                        <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>
+                          Synced {timeAgo(lastSync)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500 font-semibold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-400"/>Signed in
+                        </p>
+                      )}
                     </>
                   ) : (
                     <>
